@@ -72,8 +72,13 @@ export const empleada = z.object({
     .max(40)
     .regex(/^[a-zA-Z0-9._-]+$/, 'solo letras, números, punto, guion y guion bajo')
     .nullish()
-    .transform((v) => v || null),
-  password: z.string().min(4, 'mínimo 4 caracteres').max(72).nullish(),
+    .transform((v) => (v ? v.toLowerCase() : null)),
+  password: z
+    .string()
+    .min(4, 'mínimo 4 caracteres')
+    .max(72)
+    .nullish()
+    .transform((v) => (v == null || v === '' ? undefined : v)),
   quitarAcceso: z.boolean().optional(),
 });
 

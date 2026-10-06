@@ -6,7 +6,23 @@ import { Empleada, Turno } from '../models/index.js';
 import { toEmpleada } from '../serializers.js';
 import { conflict, notFound } from '../utils/errors.js';
 import { upsertById } from '../utils/repository.js';
-import { hashPassword, usuarioDisponible } from './auth.service.js';
+import { hashPassword, normalizarUsuario, usuarioDisponible } from './auth.service.js';
+
+const CAMPOS_FICHA = [
+  'nombre',
+  'rol',
+  'color',
+  'tarifaCent',
+  'diasDescanso',
+  'descansoSeguido',
+  'excluirNomina',
+  'activa',
+  'eliminadaEn',
+];
+
+function fichaDe(datos) {
+  return Object.fromEntries(CAMPOS_FICHA.filter((k) => datos[k] !== undefined).map((k) => [k, datos[k]]));
+}
 
 export async function listarEmpleadas() {
   const filas = await Empleada.findAll({ order: [['createdAt', 'ASC'], ['nombre', 'ASC']] });
@@ -15,26 +31,29 @@ export async function listarEmpleadas() {
 
 export function guardarEmpleada(id, datos) {
   return sequelize.transaction(async (transaction) => {
-    const { password, quitarAcceso, usuario, ...resto } = datos;
+    const { password, quitarAcceso, usuario } = datos;
     const existente = await Empleada.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
-    const valores = { ...resto };
+    const valores = fichaDe(datos);
 
     if (quitarAcceso) {
       valores.usuario = null;
       valores.passwordHash = null;
     } else {
-      if (usuario !== undefined) {
-        await usuarioDisponible(usuario, { exceptEmpleadaId: id });
-        valores.usuario = usuario;
+      const usuarioNorm = usuario !== undefined ? (usuario ? normalizarUsuario(usuario) : null) : undefined;
+      if (usuarioNorm !== undefined) {
+        await usuarioDisponible(usuarioNorm, { exceptEmpleadaId: id });
+        valores.usuario = usuarioNorm;
       }
       if (password) {
-        const userFinal = usuario !== undefined ? usuario : existente?.usuario;
+        const userFinal = usuarioNorm !== undefined ? usuarioNorm : existente?.usuario;
         if (!userFinal) throw conflict('Asigna un usuario antes de poner el PIN');
         valores.passwordHash = await hashPassword(password);
+        if (usuarioNorm !== undefined) valores.usuario = usuarioNorm;
       }
     }
 
     const { instancia, creado } = await upsertById(Empleada, id, valores, { transaction });
+    await instancia.reload({ transaction });
     return { empleada: toEmpleada(instancia), creado };
   });
 }

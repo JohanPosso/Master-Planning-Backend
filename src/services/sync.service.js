@@ -25,7 +25,9 @@ export function aplicarSync(ops) {
     await borrar(Plantilla, ops.plantillas?.delete);
     await borrar(Empleada, ops.empleadas?.delete);
 
-    for (const { id, ...datos } of ops.empleadas?.upsert ?? []) await upsertById(Empleada, id, datos, opts);
+    for (const { id, passwordHash: _ph, password: _pw, quitarAcceso: _qa, tieneAccesoPortal: _tap, ...datos } of ops.empleadas?.upsert ?? []) {
+      await upsertById(Empleada, id, datos, opts);
+    }
     for (const { id, ...datos } of ops.plantillas?.upsert ?? []) await upsertById(Plantilla, id, datos, opts);
     for (const { lunes, publicada } of ops.semanas?.upsert ?? []) {
       await upsertById(Semana, lunes, { publicada, publicadaEn: publicada ? new Date() : null }, opts);

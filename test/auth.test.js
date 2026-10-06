@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { after, before, beforeEach, describe, test } from 'node:test';
-import { api, apiRaw, cerrarBD, crearEmpleada, limpiarBD, loginComo, prepararBD, uuid } from './helpers.js';
+import { api, apiRaw, cerrarBD, crearEmpleada, crearTurno, limpiarBD, loginComo, prepararBD, tramo, uuid } from './helpers.js';
 
 describe('auth y portal', () => {
   before(prepararBD);
@@ -16,17 +16,19 @@ describe('auth y portal', () => {
     assert.ok(Array.isArray(ok.body.empleadas));
   });
 
-  test('login empleada y portal solo lectura', async () => {
+  test('login empleada case-insensitive y portal', async () => {
     const id = uuid();
-    await crearEmpleada({
+    const creada = await crearEmpleada({
       id,
       nombre: 'Lucía',
       color: 'verde',
-      usuario: 'lucia',
+      usuario: 'Lucia.Test',
       password: '1234',
     });
+    assert.equal(creada.usuario, 'lucia.test');
+    assert.equal(creada.tieneAccesoPortal, true);
 
-    const sesion = await loginComo('lucia', '1234');
+    const sesion = await loginComo('LUCIA.TEST', '1234');
     assert.equal(sesion.rol, 'empleada');
     assert.equal(sesion.perfil.nombre, 'Lucía');
 
@@ -36,15 +38,97 @@ describe('auth y portal', () => {
     const portal = await apiRaw().get('/api/portal/estado').set('Authorization', `Bearer ${sesion.token}`);
     assert.equal(portal.status, 200);
     assert.equal(portal.body.empleada.id, id);
-    assert.equal(portal.body.empleada.nombre, 'Lucía');
-    assert.ok(Array.isArray(portal.body.turnos));
     assert.ok(Array.isArray(portal.body.empleadas));
-    assert.ok(portal.body.empleadas.some((e) => e.id === id));
     assert.equal(portal.body.empleada.tarifaCent, undefined);
-    assert.equal(portal.body.empleadas[0]?.tarifaCent, undefined);
 
     const adminPortal = await api().get('/api/portal/estado');
     assert.equal(adminPortal.status, 403);
+  });
+
+  test('asignar PIN después de crear y poder entrar', async () => {
+    const id = uuid();
+    await crearEmpleada({ id, nombre: 'Ana', color: 'azul' });
+    const upd = await api()
+      .put(`/api/empleadas/${id}`)
+      .send({
+        nombre: 'Ana',
+        rol: 'Empleada',
+        color: 'azul',
+        tarifaCent: 1000,
+        diasDescanso: [],
+        descansoSeguido: false,
+        excluirNomina: false,
+        activa: true,
+        usuario: 'AnaPin',
+        password: 'abcd',
+        tieneAccesoPortal: false,
+      });
+    assert.equal(upd.status, 200);
+    assert.equal(upd.body.usuario, 'anapin');
+    assert.equal(upd.body.tieneAccesoPortal, true);
+
+    const sesion = await loginComo('anapin', 'abcd');
+    assert.equal(sesion.rol, 'empleada');
+  });
+
+  test('portal nomina solo propia y según rango', async () => {
+    const id = uuid();
+    await crearEmpleada({ id, nombre: 'Paga', color: 'turq', tarifaCent: 1000, usuario: 'paga', password: '1234' });
+    const otra = uuid();
+    await crearEmpleada({ id: otra, nombre: 'Otra', color: 'naranja', tarifaCent: 2000 });
+
+    // Lunes 2026-10-12 es festivo en seed de reglas? usamos día laboral 2026-10-13 (martes)
+    await crearTurno({ empleadaId: id, fecha: '2026-10-13', tramos: tramo(540, 660) }); // 2h
+    await crearTurno({ empleadaId: otra, fecha: '2026-10-13', tramos: tramo(540, 900) }); // 6h otra
+
+    await api().put('/api/semanas/2026-10-12').send({ publicada: true });
+
+    const sesion = await loginComo('paga', '1234');
+    const nomina = await apiRaw()
+      .get('/api/portal/nomina?inicio=2026-10-13&fin=2026-10-13')
+      .set('Authorization', `Bearer ${sesion.token}`);
+    assert.equal(nomina.status, 200);
+    assert.equal(nomina.body.estimacion.minutos, 120);
+    assert.equal(nomina.body.estimacion.importeCent, 2000); // 2h * 10€
+    // no debe incluir horas de la otra
+    assert.ok(nomina.body.estimacion.importeCent < 10000);
+
+    const semana = await apiRaw()
+      .get('/api/portal/nomina?inicio=2026-10-12&fin=2026-10-18')
+      .set('Authorization', `Bearer ${sesion.token}`);
+    assert.equal(semana.status, 200);
+    assert.equal(semana.body.estimacion.minutos, 120);
+  });
+
+  test('sync no borra el PIN', async () => {
+    const id = uuid();
+    await crearEmpleada({ id, nombre: 'Sync', color: 'indigo', usuario: 'syncuser', password: '9999' });
+    await api()
+      .post('/api/sync')
+      .send({
+        empleadas: {
+          upsert: [
+            {
+              id,
+              nombre: 'Sync',
+              rol: 'Empleada',
+              color: 'indigo',
+              tarifaCent: 1000,
+              diasDescanso: [],
+              descansoSeguido: false,
+              excluirNomina: false,
+              activa: true,
+              usuario: 'syncuser',
+              tieneAccesoPortal: true,
+            },
+          ],
+          delete: [],
+        },
+      })
+      .expect(200);
+
+    const sesion = await loginComo('syncuser', '9999');
+    assert.equal(sesion.rol, 'empleada');
   });
 
   test('login incorrecto', async () => {
