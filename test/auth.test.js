@@ -38,6 +38,10 @@ describe('auth y portal', () => {
     assert.equal(portal.body.empleada.id, id);
     assert.equal(portal.body.empleada.nombre, 'Lucía');
     assert.ok(Array.isArray(portal.body.turnos));
+    assert.ok(Array.isArray(portal.body.empleadas));
+    assert.ok(portal.body.empleadas.some((e) => e.id === id));
+    assert.equal(portal.body.empleada.tarifaCent, undefined);
+    assert.equal(portal.body.empleadas[0]?.tarifaCent, undefined);
 
     const adminPortal = await api().get('/api/portal/estado');
     assert.equal(adminPortal.status, 403);

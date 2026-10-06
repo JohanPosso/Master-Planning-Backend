@@ -6,22 +6,31 @@ import { notFound } from '../utils/errors.js';
 import { obtenerAjustes, obtenerReglas } from './configuracion.service.js';
 import { calcularNomina } from './pagos.service.js';
 
+/** Ficha visible en el horario del portal: sin tarifas ni datos de nómina. */
+function toEmpleadaHorario(e) {
+  const full = toEmpleada(e);
+  const { tarifaCent: _t, tieneAccesoPortal: _a, usuario: _u, ...rest } = full;
+  return rest;
+}
+
 async function empleadaDelPortal(empleadaId) {
   const e = await Empleada.findByPk(empleadaId);
   if (!e || e.eliminadaEn) throw notFound('Empleada');
   return e;
 }
 
-/** Estado filtrado para el portal de una empleada (solo lectura). */
+/** Estado del portal: horario completo del equipo (semanas publicadas) + datos de pago solo propios. */
 export async function obtenerEstadoPortal(empleadaId) {
-  const empleada = await empleadaDelPortal(empleadaId);
+  const yo = await empleadaDelPortal(empleadaId);
   const semanasPub = await Semana.findAll({ where: { publicada: true }, order: [['lunes', 'ASC']] });
   const lunesPub = new Set(semanasPub.map((s) => String(s.lunes)));
 
-  const turnosAll = await Turno.findAll({ where: { empleadaId }, order: [['fecha', 'ASC']] });
-  const turnos = turnosAll.filter((t) => lunesPub.has(lunesDeIso(String(t.fecha)))).map(toTurno);
-
-  const [registros, pagosAll, reglas, ajustes] = await Promise.all([
+  const [equipo, turnosAll, registros, pagosAll, reglas, ajustes] = await Promise.all([
+    Empleada.findAll({
+      where: { eliminadaEn: null, activa: true },
+      order: [['createdAt', 'ASC'], ['nombre', 'ASC']],
+    }),
+    Turno.findAll({ order: [['fecha', 'ASC']] }),
     Registro.findAll({ where: { empleadaId }, order: [['fecha', 'ASC']] }),
     PeriodoPago.findAll({
       include: [{ association: 'lineas', where: { empleadaId }, required: true }],
@@ -30,6 +39,8 @@ export async function obtenerEstadoPortal(empleadaId) {
     obtenerReglas(),
     obtenerAjustes(),
   ]);
+
+  const turnos = turnosAll.filter((t) => lunesPub.has(lunesDeIso(String(t.fecha)))).map(toTurno);
 
   const pagos = pagosAll.map((p) => {
     const plain = p.get({ plain: true });
@@ -40,7 +51,8 @@ export async function obtenerEstadoPortal(empleadaId) {
 
   return {
     version: 1,
-    empleada: toEmpleada(empleada),
+    empleada: toEmpleadaHorario(yo),
+    empleadas: equipo.map(toEmpleadaHorario),
     turnos,
     registros: registros.map(toRegistro),
     pagos,
