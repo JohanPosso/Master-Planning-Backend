@@ -1,7 +1,4 @@
-/**
- * Contrato con el frontend (src/lib/types.ts). Se eligen los campos explícitamente para no filtrar
- * columnas internas (timestamps, minutos derivados) y se omiten los opcionales vacíos, como en el cliente.
- */
+/** Serializa modelos al contrato JSON del frontend. */
 const sinVacios = (obj) => Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== null && v !== undefined));
 
 export const toEmpleada = (e) =>

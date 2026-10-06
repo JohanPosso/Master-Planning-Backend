@@ -1,12 +1,4 @@
-/**
- * Esquema inicial de Jornada.
- * - Horas: fecha (DATE) + minutos desde las 00:00 en tramos JSONB (1–2 tramos, siempre se leen juntos).
- * - Dinero: céntimos enteros.
- * - Un turno y un registro como máximo por empleada y día. Las restricciones únicas son DEFERRABLE
- *   para que «deshacer» pueda intercambiar huecos dentro de una transacción.
- * - El histórico pagado está protegido: no se puede borrar físicamente una empleada con horas o líneas de pago.
- */
-const TRAMOS_CHECK = (col) => `CHECK (jsonb_typeof(${col}) = 'array' AND jsonb_array_length(${col}) BETWEEN 1 AND 2)`;
+/** Esquema inicial. */const TRAMOS_CHECK = (col) => `CHECK (jsonb_typeof(${col}) = 'array' AND jsonb_array_length(${col}) BETWEEN 1 AND 2)`;
 const TIMESTAMPS = `
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`;

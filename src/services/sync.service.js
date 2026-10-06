@@ -5,8 +5,7 @@ import { actualizarAjustes, actualizarReglas } from './configuracion.service.js'
 import { plantillaVigente } from './turnos.service.js';
 
 /**
- * Aplica un lote de cambios (upsert / delete por colección) en UNA transacción.
- * Lo usa «Deshacer» del frontend: calcula la diferencia entre el estado actual y el anterior y la envía aquí.
+ * Aplica un lote de cambios (upsert / delete) en una transacción.
  *
  * Orden: primero se borran hijos → padres y luego se crean padres → hijos, respetando las claves foráneas.
  * Las restricciones únicas (empleada, día) se difieren al COMMIT para permitir intercambiar huecos

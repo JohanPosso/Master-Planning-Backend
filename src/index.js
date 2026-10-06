@@ -17,7 +17,6 @@ async function main() {
   };
   process.on('SIGTERM', () => cerrar('SIGTERM'));
   process.on('SIGINT', () => cerrar('SIGINT'));
-  // Una promesa sin capturar no debe tumbar la API: se registra para poder corregirla.
   process.on('unhandledRejection', (motivo) => logger.error('Promesa rechazada sin capturar', motivo));
 }
 
