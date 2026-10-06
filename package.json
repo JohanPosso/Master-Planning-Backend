@@ -1,0 +1,41 @@
+{
+  "name": "jornada-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "API de Jornada: horarios, registro de horas y nómina de la cafetería",
+  "type": "module",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=20.6"
+  },
+  "scripts": {
+    "dev": "node --watch --env-file=.env src/index.js",
+    "start": "node src/index.js",
+    "db:up": "docker compose up -d db",
+    "db:down": "docker compose down",
+    "db:migrate": "node --env-file=.env src/database/migrate.js",
+    "db:migrate:down": "node --env-file=.env src/database/migrate.js down",
+    "db:seed": "node --env-file=.env src/database/seed.js",
+    "db:reset": "node --env-file=.env src/database/seed.js --force",
+    "test": "npm run test:unit && npm run test:integration",
+    "test:unit": "node --test src/domain/*.test.js src/middleware/*.test.js",
+    "test:integration": "node --env-file=.env.test --test --test-concurrency=1 test/*.test.js",
+    "lint": "find src test -name '*.js' -print0 | xargs -0 -n1 node --check",
+    "test:smoke": "node --test scripts/smoke-api.test.mjs",
+    "test:e2e": "node --test scripts/e2e.test.mjs"
+  },
+  "author": "Jesus Johan Posso",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "helmet": "^8.3.0",
+    "pg": "^8.23.1",
+    "pg-hstore": "^2.3.4",
+    "sequelize": "^6.37.8",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "supertest": "^7.3.1"
+  }
+}
