@@ -87,6 +87,28 @@ export const login = z.object({
   password: z.string().min(1, 'contraseña obligatoria').max(72),
 });
 
+export const portalPerfil = z
+  .object({
+    nombre: z.string().trim().min(1, 'el nombre es obligatorio').max(80).optional(),
+    usuario: z
+      .string()
+      .trim()
+      .min(2, 'mínimo 2 caracteres')
+      .max(40)
+      .regex(/^[a-zA-Z0-9._-]+$/, 'solo letras, números, punto, guion y guion bajo')
+      .transform((v) => v.toLowerCase())
+      .optional(),
+    passwordActual: z.string().min(1).max(72).optional(),
+    passwordNueva: z.string().min(4, 'mínimo 4 caracteres').max(72).optional(),
+  })
+  .refine((d) => d.nombre !== undefined || d.usuario !== undefined || d.passwordNueva !== undefined, {
+    message: 'sin cambios',
+  })
+  .refine((d) => !d.passwordNueva || Boolean(d.passwordActual), {
+    message: 'indica tu clave actual para cambiarla',
+    path: ['passwordActual'],
+  });
+
 export const plantilla = z.object({ nombre: z.string().trim().min(1, 'el nombre es obligatorio').max(60, 'máximo 60 caracteres'), tramos });
 
 export const turno = z.object({

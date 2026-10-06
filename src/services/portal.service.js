@@ -2,15 +2,16 @@ import { Op } from 'sequelize';
 import { lunesDeIso } from '../domain/fechas.js';
 import { Empleada, PeriodoPago, Registro, Semana, Turno } from '../models/index.js';
 import { toEmpleada, toPago, toRegistro, toSemana, toTurno } from '../serializers.js';
-import { notFound } from '../utils/errors.js';
+import { forbidden, notFound, unauthorized } from '../utils/errors.js';
+import { hashPassword, normalizarUsuario, usuarioDisponible, verificarPassword } from './auth.service.js';
 import { obtenerAjustes, obtenerReglas } from './configuracion.service.js';
 import { calcularNomina } from './pagos.service.js';
 
 /** Ficha visible en el horario del portal: sin tarifas ni datos de nómina. */
-function toEmpleadaHorario(e) {
+function toEmpleadaHorario(e, { propia = false } = {}) {
   const full = toEmpleada(e);
-  const { tarifaCent: _t, tieneAccesoPortal: _a, usuario: _u, ...rest } = full;
-  return rest;
+  const { tarifaCent: _t, tieneAccesoPortal: _a, usuario, ...rest } = full;
+  return propia ? { ...rest, usuario: usuario ?? null } : rest;
 }
 
 async function empleadaDelPortal(empleadaId) {
@@ -51,8 +52,8 @@ export async function obtenerEstadoPortal(empleadaId) {
 
   return {
     version: 1,
-    empleada: toEmpleadaHorario(yo),
-    empleadas: equipo.map(toEmpleadaHorario),
+    empleada: toEmpleadaHorario(yo, { propia: true }),
+    empleadas: equipo.map((e) => toEmpleadaHorario(e)),
     turnos,
     registros: registros.map(toRegistro),
     pagos,
@@ -60,6 +61,29 @@ export async function obtenerEstadoPortal(empleadaId) {
     reglas,
     ajustes,
   };
+}
+
+/** La empleada actualiza su nombre, usuario y/o clave. */
+export async function actualizarPerfilPortal(empleadaId, datos) {
+  const e = await empleadaDelPortal(empleadaId);
+  if (!e.activa) throw forbidden('Tu cuenta está inactiva');
+
+  const cambios = {};
+  if (datos.nombre !== undefined) cambios.nombre = datos.nombre;
+  if (datos.usuario !== undefined) {
+    const u = normalizarUsuario(datos.usuario);
+    await usuarioDisponible(u, { exceptEmpleadaId: empleadaId });
+    cambios.usuario = u;
+  }
+  if (datos.passwordNueva) {
+    const ok = await verificarPassword(datos.passwordActual ?? '', e.passwordHash);
+    if (!ok) throw unauthorized('La clave actual no es correcta');
+    cambios.passwordHash = await hashPassword(datos.passwordNueva);
+  }
+
+  await e.update(cambios);
+  await e.reload();
+  return toEmpleadaHorario(e, { propia: true });
 }
 
 /** Estimación de nómina del periodo + histórico propio. */

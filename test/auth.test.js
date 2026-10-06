@@ -131,6 +131,30 @@ describe('auth y portal', () => {
     assert.equal(sesion.rol, 'empleada');
   });
 
+  test('empleada puede actualizar nombre y clave', async () => {
+    const id = uuid();
+    await crearEmpleada({ id, nombre: 'Clara', color: 'azul', usuario: 'clara', password: '1234' });
+    const sesion = await loginComo('clara', '1234');
+    const auth = { Authorization: `Bearer ${sesion.token}` };
+
+    const ok = await apiRaw()
+      .patch('/api/portal/perfil')
+      .set(auth)
+      .send({ nombre: 'Clara Nueva', usuario: 'ClaraNueva', passwordActual: '1234', passwordNueva: '5678' });
+    assert.equal(ok.status, 200, JSON.stringify(ok.body));
+    assert.equal(ok.body.nombre, 'Clara Nueva');
+    assert.equal(ok.body.usuario, 'claranueva');
+
+    const mal = await apiRaw()
+      .patch('/api/portal/perfil')
+      .set(auth)
+      .send({ passwordActual: 'mal', passwordNueva: '9999' });
+    assert.equal(mal.status, 401);
+
+    const loginNuevo = await loginComo('claranueva', '5678');
+    assert.equal(loginNuevo.rol, 'empleada');
+  });
+
   test('login incorrecto', async () => {
     const res = await apiRaw().post('/api/auth/login').send({ usuario: 'admin', password: 'mal' });
     assert.equal(res.status, 401);
