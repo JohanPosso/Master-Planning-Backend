@@ -11,3 +11,5 @@ export class AppError extends Error {
 
 export const notFound = (que) => new AppError(404, 'NOT_FOUND', `${que} no encontrado`);
 export const conflict = (message, details) => new AppError(409, 'CONFLICT', message, details);
+export const unauthorized = (message = 'No autenticado') => new AppError(401, 'UNAUTHORIZED', message);
+export const forbidden = (message = 'No autorizado') => new AppError(403, 'FORBIDDEN', message);

@@ -17,6 +17,9 @@ function leerEnv(source = process.env) {
   }
 
   const nodeEnv = source.NODE_ENV ?? 'development';
+  const jwtSecret = source.JWT_SECRET || (nodeEnv === 'production' ? '' : 'dev-secret-cambiar');
+  if (!jwtSecret) throw new Error('Configura JWT_SECRET (ver .env.example).');
+
   return Object.freeze({
     nodeEnv,
     isProduction: nodeEnv === 'production',
@@ -24,6 +27,10 @@ function leerEnv(source = process.env) {
     port: Number(source.PORT ?? 3000),
     corsOrigin: lista(source.CORS_ORIGIN ?? 'http://localhost:5173'),
     timezone: source.APP_TIMEZONE ?? 'Europe/Madrid',
+    jwtSecret,
+    jwtExpiresIn: source.JWT_EXPIRES_IN ?? '7d',
+    adminUser: source.ADMIN_USER ?? 'admin',
+    adminPassword: source.ADMIN_PASSWORD ?? 'admin123',
     database: Object.freeze(database),
   });
 }

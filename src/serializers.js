@@ -13,6 +13,8 @@ export const toEmpleada = (e) =>
     excluirNomina: e.excluirNomina,
     activa: e.activa,
     eliminadaEn: e.eliminadaEn,
+    usuario: e.usuario ?? null,
+    tieneAccesoPortal: Boolean(e.usuario && e.passwordHash),
   });
 
 export const toPlantilla = (p) => ({ id: p.id, nombre: p.nombre, tramos: p.tramos });

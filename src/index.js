@@ -2,9 +2,11 @@ import { createApp } from './app.js';
 import { sequelize } from './config/database.js';
 import { env } from './config/env.js';
 import { logger } from './config/logger.js';
+import { asegurarAdmin } from './services/auth.service.js';
 
 async function main() {
   await sequelize.authenticate();
+  await asegurarAdmin();
   const server = createApp().listen(env.port, () => logger.info(`API de Jornada en http://localhost:${env.port}/api`));
 
   const cerrar = (senal) => {

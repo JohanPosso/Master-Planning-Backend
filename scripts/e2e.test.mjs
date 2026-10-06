@@ -9,10 +9,17 @@ import { after, before, describe, it } from 'node:test';
 import { diaSemana, esDomingo, rangoFechas, sumarDias } from '../src/domain/fechas.js';
 
 const API = (process.env.API_URL ?? 'http://localhost:3000/api').replace(/\/$/, '');
+const ADMIN_USER = process.env.ADMIN_USER ?? 'admin';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? 'admin123';
+let token = null;
+
 async function http(metodo, ruta, cuerpo, headers = {}) {
   const res = await fetch(`${API}${ruta}`, {
     method: metodo,
-    headers: cuerpo === undefined ? headers : { 'Content-Type': 'application/json', ...headers },
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(cuerpo === undefined ? headers : { 'Content-Type': 'application/json', ...headers }),
+    },
     body: cuerpo === undefined ? undefined : typeof cuerpo === 'string' ? cuerpo : JSON.stringify(cuerpo),
   });
   const texto = await res.text();
@@ -40,7 +47,11 @@ async function nuevaEmpleada(datos) {
   return id;
 }
 
-before(async () => { original = await ok(http('GET', '/estado'), 200); });
+before(async () => {
+  const login = await ok(http('POST', '/auth/login', { usuario: ADMIN_USER, password: ADMIN_PASSWORD }), 200);
+  token = login.token;
+  original = await ok(http('GET', '/estado'), 200);
+});
 
 after(async () => {
   for (const id of ids.pagos) await http('DELETE', `/pagos/${id}`);

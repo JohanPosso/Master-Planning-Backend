@@ -21,6 +21,7 @@ export function sumarDias(fecha, dias) {
 export const diaSemana = (fecha) => (aUtc(fecha).getUTCDay() + 6) % 7;
 export const esLunes = (fecha) => diaSemana(fecha) === 0;
 export const esDomingo = (fecha) => diaSemana(fecha) === 6;
+export const lunesDeIso = (fecha) => sumarDias(fecha, -diaSemana(fecha));
 
 export const diasEntre = (inicio, fin) => Math.round((aUtc(fin) - aUtc(inicio)) / 86_400_000);
 

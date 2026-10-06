@@ -16,6 +16,8 @@ export const Empleada = sequelize.define(
     excluirNomina: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
     activa: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
     eliminadaEn: { type: DataTypes.DATEONLY, allowNull: true },
+    usuario: { type: DataTypes.STRING(40), allowNull: true, unique: true },
+    passwordHash: { type: DataTypes.STRING(100), allowNull: true },
   },
   { tableName: 'empleadas' },
 );

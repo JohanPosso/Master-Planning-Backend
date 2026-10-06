@@ -65,6 +65,21 @@ export const empleada = z.object({
   excluirNomina: z.boolean().default(false),
   activa: z.boolean().default(true),
   eliminadaEn: fecha.nullish().transform((v) => v ?? null),
+  usuario: z
+    .string()
+    .trim()
+    .min(2, 'mínimo 2 caracteres')
+    .max(40)
+    .regex(/^[a-zA-Z0-9._-]+$/, 'solo letras, números, punto, guion y guion bajo')
+    .nullish()
+    .transform((v) => v || null),
+  password: z.string().min(4, 'mínimo 4 caracteres').max(72).nullish(),
+  quitarAcceso: z.boolean().optional(),
+});
+
+export const login = z.object({
+  usuario: z.string().trim().min(1, 'usuario obligatorio').max(40),
+  password: z.string().min(1, 'contraseña obligatoria').max(72),
 });
 
 export const plantilla = z.object({ nombre: z.string().trim().min(1, 'el nombre es obligatorio').max(60, 'máximo 60 caracteres'), tramos });
@@ -149,7 +164,7 @@ const lineaPago = z.object({
 });
 
 export const sync = z.object({
-  empleadas: coleccion(conId(empleada)),
+  empleadas: coleccion(conId(empleada.omit({ password: true, quitarAcceso: true }))),
   plantillas: coleccion(conId(plantilla)),
   semanas: coleccion(z.object({ lunes, publicada: z.boolean() }), lunes),
   turnos: coleccion(conId(turno)),

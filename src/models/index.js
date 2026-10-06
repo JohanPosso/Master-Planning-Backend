@@ -7,6 +7,7 @@ import { Plantilla } from './Plantilla.js';
 import { Registro } from './Registro.js';
 import { Semana } from './Semana.js';
 import { Turno } from './Turno.js';
+import { UsuarioAdmin } from './UsuarioAdmin.js';
 
 // Las reglas ON DELETE reales viven en la migración; aquí solo se declaran las relaciones para consultas.
 Empleada.hasMany(Turno, { as: 'turnos', foreignKey: 'empleadaId' });
@@ -20,4 +21,16 @@ PeriodoPago.hasMany(LineaPago, { as: 'lineas', foreignKey: 'periodoId' });
 LineaPago.belongsTo(PeriodoPago, { as: 'periodo', foreignKey: 'periodoId' });
 LineaPago.belongsTo(Empleada, { as: 'empleada', foreignKey: 'empleadaId' });
 
-export { Configuracion, Empleada, Festivo, ID_CONFIGURACION, LineaPago, PeriodoPago, Plantilla, Registro, Semana, Turno };
+export {
+  Configuracion,
+  Empleada,
+  Festivo,
+  ID_CONFIGURACION,
+  LineaPago,
+  PeriodoPago,
+  Plantilla,
+  Registro,
+  Semana,
+  Turno,
+  UsuarioAdmin,
+};

@@ -7,6 +7,7 @@ import { logger } from '../config/logger.js';
 import { REGLAS_POR_DEFECTO } from '../domain/catalogos.js';
 import { hoyEn, sumarDias, diaSemana } from '../domain/fechas.js';
 import { Configuracion, Empleada, Festivo, ID_CONFIGURACION, Plantilla, Registro, Turno } from '../models/index.js';
+import { asegurarAdmin, hashPassword } from '../services/auth.service.js';
 
 /** Datos de ejemplo: el equipo real de la cafetería y 10 semanas de horario (antes vivían en el frontend). */
 const T = (a, b) => {
@@ -19,9 +20,9 @@ const JE = [T('09:00', '21:00')];
 
 const EQUIPO = [
   { clave: 'val', nombre: 'Valentina', rol: 'Jefa', color: 'rosa', diasDescanso: [6], excluirNomina: true },
-  { clave: 'sil', nombre: 'Silvia', rol: 'Empleada', color: 'morado', diasDescanso: [3, 4], descansoSeguido: true },
-  { clave: 'dul', nombre: 'Dulce', rol: 'Empleada', color: 'turq', diasDescanso: [2] },
-  { clave: 'car', nombre: 'Carolina', rol: 'Empleada', color: 'naranja', diasDescanso: [6] },
+  { clave: 'sil', nombre: 'Silvia', rol: 'Empleada', color: 'morado', diasDescanso: [3, 4], descansoSeguido: true, usuario: 'silvia', pin: '1234' },
+  { clave: 'dul', nombre: 'Dulce', rol: 'Empleada', color: 'turq', diasDescanso: [2], usuario: 'dulce', pin: '1234' },
+  { clave: 'car', nombre: 'Carolina', rol: 'Empleada', color: 'naranja', diasDescanso: [6], usuario: 'carolina', pin: '1234' },
 ];
 
 /** Patrón semanal (lunes → domingo; null = descanso). */
@@ -52,18 +53,24 @@ const FESTIVOS = [
   ['2027-01-06', 'Epifanía del Señor'],
 ];
 
-export function construirDatos(hoy = hoyEn(env.timezone)) {
+export async function construirDatos(hoy = hoyEn(env.timezone)) {
   const ahora = Date.now();
-  const empleadas = EQUIPO.map(({ clave, ...e }, i) => ({
-    id: randomUUID(),
-    clave,
-    tarifaCent: 1000,
-    descansoSeguido: false,
-    excluirNomina: false,
-    activa: true,
-    ...e,
-    createdAt: new Date(ahora + i), // conserva el orden del equipo en la UI
-  }));
+  const empleadas = [];
+  for (let i = 0; i < EQUIPO.length; i++) {
+    const { clave, usuario, pin, ...e } = EQUIPO[i];
+    empleadas.push({
+      id: randomUUID(),
+      clave,
+      tarifaCent: 1000,
+      descansoSeguido: false,
+      excluirNomina: false,
+      activa: true,
+      usuario: usuario ?? null,
+      passwordHash: pin ? await hashPassword(pin) : null,
+      ...e,
+      createdAt: new Date(ahora + i),
+    });
+  }
   const plantillas = PLANTILLAS.map(([nombre, tramos], orden) => ({ id: randomUUID(), nombre, tramos, orden }));
 
   const lunesActual = sumarDias(hoy, -diaSemana(hoy));
@@ -95,13 +102,14 @@ export function construirDatos(hoy = hoyEn(env.timezone)) {
 const TABLAS = 'lineas_pago, periodos_pago, registros, turnos, semanas, plantillas, festivos, empleadas';
 
 export async function seed({ force = false } = {}) {
+  await asegurarAdmin();
   await sequelize.transaction(async (transaction) => {
     if (force) await sequelize.query(`TRUNCATE ${TABLAS} CASCADE`, { transaction });
     else if (await Empleada.count({ transaction })) {
       logger.info('La base de datos ya tiene datos; usa --force para reiniciarla.');
       return;
     }
-    const datos = construirDatos();
+    const datos = await construirDatos();
     await Empleada.bulkCreate(datos.empleadas, { transaction });
     await Plantilla.bulkCreate(datos.plantillas, { transaction });
     await Turno.bulkCreate(datos.turnos, { transaction });

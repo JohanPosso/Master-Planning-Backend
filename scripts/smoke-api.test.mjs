@@ -10,11 +10,17 @@ import { after, before, describe, it } from 'node:test';
 import { diaSemana, sumarDias } from '../src/domain/fechas.js';
 
 const API = (process.env.API_URL ?? 'http://localhost:3000/api').replace(/\/$/, '');
+const ADMIN_USER = process.env.ADMIN_USER ?? 'admin';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? 'admin123';
+let token = null;
 
 async function http(metodo, ruta, cuerpo, { raw } = {}) {
+  const headers = {};
+  if (cuerpo !== undefined) headers['Content-Type'] = 'application/json';
+  if (token) headers.Authorization = `Bearer ${token}`;
   const res = await fetch(`${API}${ruta}`, {
     method: metodo,
-    headers: cuerpo === undefined ? {} : { 'Content-Type': 'application/json' },
+    headers,
     body: cuerpo === undefined ? undefined : raw ? cuerpo : JSON.stringify(cuerpo),
   });
   const texto = await res.text();
@@ -38,6 +44,8 @@ const eva = { id: randomUUID(), nombre: 'Smoke Eva', rol: 'Empleada', color: 've
 
 before(async () => {
   await esperar(http('GET', '/health'), 200);
+  const login = await esperar(http('POST', '/auth/login', { usuario: ADMIN_USER, password: ADMIN_PASSWORD }), 200);
+  token = login.token;
   reglasOriginales = await esperar(http('GET', '/reglas'), 200);
   ajustesOriginales = await esperar(http('GET', '/ajustes'), 200);
 });
