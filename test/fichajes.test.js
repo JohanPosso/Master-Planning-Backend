@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { after, afterEach, before, beforeEach, describe, it } from 'node:test';
+import { cerrarFichajesOlvidados } from '../src/services/fichajes.service.js';
 import { reloj } from '../src/utils/reloj.js';
 import { api, apiRaw, cerrarBD, crearEmpleada, limpiarBD, loginComo, prepararBD, tramo, uuid } from './helpers.js';
 
@@ -151,12 +152,13 @@ describe('Permisos', () => {
     await apiRaw().get('/api/fichaje/config').set('Authorization', `Bearer ${yo.token}`).expect(403);
   });
 
-  it('no hay forma de editar ni borrar un fichaje', async () => {
+  it('un fichaje nunca se borra; corregirlo exige ser encargado y dar un motivo', async () => {
     const yo = await empleadaConPortal();
     a('08:00');
     const { fichaje } = (await yo.fichar('entrada').expect(201)).body;
     await api().delete(`/api/fichajes/${fichaje.id}`).expect(404);
-    await api().put(`/api/fichajes/${fichaje.id}`).send({ minuto: 1 }).expect(404);
+    await api().put(`/api/fichajes/${fichaje.id}`).send({ tipo: 'entrada', minuto: 470 }).expect(400);
+    await apiRaw().put(`/api/fichajes/${fichaje.id}`).set('Authorization', `Bearer ${yo.token}`).send({ tipo: 'entrada', minuto: 470, motivo: 'yo misma' }).expect(403);
   });
 });
 
@@ -171,6 +173,8 @@ describe('Geocerca', () => {
     await api().put('/api/fichaje/config').send({ geocerca: { activa: true, ...CAFETERIA, radioM: 150 } }).expect(200);
     const yo = await empleadaConPortal();
     a('08:00');
+    // Por defecto, sin ubicación ni Wi-Fi deja fichar «sin verificar»; con la política «bloquear», no.
+    await api().put('/api/fichaje/config').send({ geocerca: { activa: true, ...CAFETERIA, radioM: 150 }, sinVerificar: 'bloquear' }).expect(200);
     assert.equal((await yo.fichar('entrada').expect(400)).body.error.code, 'UBICACION_REQUERIDA');
     const lejos = await yo.fichar('entrada', { ubicacion: { latitud: 40.4155, longitud: -3.7074, precisionM: 10 } }).expect(403);
     assert.equal(lejos.body.error.code, 'FUERA_DE_ZONA');
@@ -179,6 +183,7 @@ describe('Geocerca', () => {
     assert.ok(ok.body.fichaje.distanciaM < 20);
     assert.equal('latitud' in ok.body.fichaje, false, 'las coordenadas no salen de la BD');
     assert.deepEqual((await yo.resumen().expect(200)).body.geocerca, { activa: true, radioM: 150 });
+    assert.equal(ok.body.fichaje.verificacion, 'gps');
   });
 });
 
@@ -194,5 +199,136 @@ describe('Vista del encargado', () => {
     const nov = (await api().get('/api/fichajes/novedades').query({ desde: HOY }).expect(200)).body;
     assert.equal(nov.fichajes.length, 2);
     assert.equal(nov.registros[0].origen, 'fichaje');
+  });
+});
+
+describe('Wi-Fi de la cafetería y fichajes sin verificar', () => {
+  const CAFETERIA = { latitud: 40.4168, longitud: -3.7038 };
+  const config = (extra) => api().put('/api/fichaje/config').send({ geocerca: { activa: true, ...CAFETERIA, radioM: 150 }, ...extra });
+
+  it('en el Wi-Fi de la cafetería ficha sin ubicación y el portal lo sabe', async () => {
+    // Los tests llegan desde 127.0.0.1: esa es «la red de la cafetería».
+    await config({ red: { activa: true, ips: ['127.0.0.1'] } }).expect(200);
+    const yo = await empleadaConPortal();
+    a('08:00');
+    assert.equal((await yo.resumen().expect(200)).body.enRedCafeteria, true);
+    const r = await yo.fichar('entrada').expect(201);
+    assert.equal(r.body.fichaje.verificacion, 'red');
+  });
+
+  it('en el Wi-Fi vale aunque el GPS diga que está lejos (dentro de un local el GPS falla)', async () => {
+    await config({ red: { activa: true, ips: ['127.0.0.1'] } }).expect(200);
+    const yo = await empleadaConPortal();
+    a('08:00');
+    const r = await yo.fichar('entrada', { ubicacion: { latitud: 40.4155, longitud: -3.7074, precisionM: 10 } }).expect(201);
+    assert.equal(r.body.fichaje.verificacion, 'red');
+  });
+
+  it('sin GPS ni Wi-Fi deja fichar «sin verificar» y lo anota en el registro', async () => {
+    await config({ red: { activa: true, ips: ['83.45.10.2'] } }).expect(200);
+    const yo = await empleadaConPortal();
+    a('08:00');
+    assert.equal((await yo.fichar('entrada').expect(201)).body.fichaje.verificacion, 'sin_verificar');
+    a('12:00');
+    const s = await yo.fichar('salida').expect(201);
+    assert.match(s.body.registro.nota, /sin verificar/);
+  });
+
+  it('valida la configuración y devuelve la IP actual del encargado', async () => {
+    await api().put('/api/fichaje/config').send({ geocerca: { activa: false, latitud: null, longitud: null, radioM: 150 }, red: { activa: true, ips: [] } }).expect(400);
+    await api().put('/api/fichaje/config').send({ geocerca: { activa: false, latitud: null, longitud: null, radioM: 150 }, red: { activa: false, ips: ['no-es-ip'] } }).expect(400);
+    await api().put('/api/fichaje/config').send({ geocerca: { activa: false, latitud: null, longitud: null, radioM: 150 }, cierreAutomaticoHoras: 3 }).expect(400);
+    assert.equal((await api().get('/api/fichaje/mi-ip').expect(200)).body.ip, '127.0.0.1');
+  });
+});
+
+describe('Cierre automático', () => {
+  it('cierra a las 10 h al fin del turno, deja el día por revisar y no duplica', async () => {
+    const yo = await empleadaConPortal();
+    await api().put(`/api/turnos/${uuid()}`).send({ empleadaId: yo.e.id, fecha: HOY, tramos: tramo(480, 720) }).expect(201);
+    a('08:00'); await yo.fichar('entrada').expect(201);
+    a('17:59'); assert.equal(await cerrarFichajesOlvidados(), 0, 'aún no han pasado 10 h');
+    a('18:00'); assert.equal(await cerrarFichajesOlvidados(), 1);
+    assert.equal(await cerrarFichajesOlvidados(), 0, 'no vuelve a cerrarlo');
+
+    const fichajes = (await api().get('/api/fichajes').expect(200)).body;
+    const salida = fichajes.find((f) => f.tipo === 'salida');
+    assert.deepEqual([salida.minuto, salida.origen], [720, 'automatico']);
+    const [reg] = (await api().get('/api/registros').expect(200)).body;
+    assert.deepEqual([reg.tramos, reg.estado], [tramo(480, 720), 'previsto']);
+    assert.match(reg.nota, /Salida automática/);
+    a('19:00');
+    assert.equal((await yo.resumen().expect(200)).body.toca, 'entrada');
+  });
+
+  it('sin turno cierra a entrada + 10 h; una entrada olvidada de ayer se cierra al día siguiente', async () => {
+    const yo = await empleadaConPortal();
+    a('15:00', '2026-03-09'); await yo.fichar('entrada').expect(201);
+    a('09:00'); assert.equal(await cerrarFichajesOlvidados(), 1);
+    const salida = (await api().get('/api/fichajes').expect(200)).body.find((f) => f.tipo === 'salida');
+    assert.deepEqual([salida.fecha, salida.minuto], ['2026-03-09', 1439], 'como máximo 23:59 del mismo día');
+  });
+
+  it('respeta las horas configuradas', async () => {
+    await api().put('/api/fichaje/config').send({ geocerca: { activa: false, latitud: null, longitud: null, radioM: 150 }, cierreAutomaticoHoras: 6 }).expect(200);
+    const yo = await empleadaConPortal();
+    a('08:00'); await yo.fichar('entrada').expect(201);
+    a('14:00'); assert.equal(await cerrarFichajesOlvidados(), 1);
+    assert.equal((await api().get('/api/fichajes').expect(200)).body.find((f) => f.tipo === 'salida').minuto, 840);
+  });
+});
+
+describe('Correcciones del encargado', () => {
+  it('añade la salida olvidada y genera las horas', async () => {
+    const yo = await empleadaConPortal();
+    a('09:03'); await yo.fichar('entrada').expect(201);
+    const r = await api().post('/api/fichajes').send({ empleadaId: yo.e.id, fecha: HOY, tipo: 'salida', minuto: 1020, motivo: 'Olvidó fichar al salir' }).expect(201);
+    assert.deepEqual(r.body.registro.tramos, tramo(543, 1020));
+    assert.equal(r.body.fichajes.at(-1).origen, 'encargado');
+    assert.equal(r.body.fichajes.at(-1).motivo, 'Olvidó fichar al salir');
+  });
+
+  it('una entrada añadida a posteriori se coloca en su hora (no al final)', async () => {
+    const yo = await empleadaConPortal();
+    a('12:00'); await api().post('/api/fichajes').send({ empleadaId: yo.e.id, fecha: HOY, tipo: 'salida', minuto: 720, motivo: 'Salida anotada en papel' }).expect(201);
+    const r = await api().post('/api/fichajes').send({ empleadaId: yo.e.id, fecha: HOY, tipo: 'entrada', minuto: 480, motivo: 'No pudo fichar: sin batería' }).expect(201);
+    assert.deepEqual(r.body.registro.tramos, tramo(480, 720));
+  });
+
+  it('corregir anula el original con su motivo, lo enlaza y recalcula las horas', async () => {
+    const yo = await empleadaConPortal();
+    a('08:30'); const { fichaje: entrada } = (await yo.fichar('entrada').expect(201)).body;
+    a('12:00'); await yo.fichar('salida').expect(201);
+    const r = await api().put(`/api/fichajes/${entrada.id}`).send({ tipo: 'entrada', minuto: 480, motivo: 'Llegó a las 8, el móvil no tenía cobertura' }).expect(200);
+    const original = r.body.fichajes.find((f) => f.id === entrada.id);
+    const nueva = r.body.fichajes.find((f) => f.sustituyeA === entrada.id);
+    assert.ok(original.anulado);
+    assert.equal(original.motivo, 'Llegó a las 8, el móvil no tenía cobertura');
+    assert.deepEqual([nueva.minuto, nueva.origen], [480, 'encargado']);
+    assert.deepEqual(r.body.registro.tramos, tramo(480, 720));
+    await api().put(`/api/fichajes/${entrada.id}`).send({ tipo: 'entrada', minuto: 470, motivo: 'otra vez' }).expect(409);
+
+    const historial = (await yo.resumen().expect(200)).body.historial[0];
+    assert.equal(historial.corregido, true, 'la empleada ve que se corrigió');
+    assert.equal(historial.fichajes.some((f) => f.id === entrada.id), false, 'y solo los vigentes');
+  });
+
+  it('anular deja el día sin horas fichadas (el registro de fichaje desaparece) pero conserva el historial', async () => {
+    const yo = await empleadaConPortal();
+    a('08:00'); await yo.fichar('entrada').expect(201);
+    a('08:01'); const { fichaje: salida } = (await yo.fichar('salida').expect(201)).body;
+    const r = await api().post(`/api/fichajes/${salida.id}/anular`).send({ motivo: 'Fichaje de prueba' }).expect(200);
+    assert.equal(r.body.registro, null);
+    assert.equal((await api().get('/api/fichajes').expect(200)).body.length, 2, 'nada se borra');
+    await api().post(`/api/fichajes/${salida.id}/anular`).send({ motivo: 'x' }).expect(400);
+  });
+
+  it('no toca un registro ya confirmado', async () => {
+    const yo = await empleadaConPortal();
+    a('08:00'); await yo.fichar('entrada').expect(201);
+    a('12:00'); const { fichaje } = (await yo.fichar('salida').expect(201)).body;
+    await api().post('/api/registros/confirmar-dia').send({ fecha: HOY, empleadaIds: [yo.e.id] }).expect(200);
+    const r = await api().put(`/api/fichajes/${fichaje.id}`).send({ tipo: 'salida', minuto: 780, motivo: 'Se quedó a cerrar' }).expect(200);
+    assert.deepEqual([r.body.registro.tramos, r.body.registro.estado], [tramo(480, 720), 'confirmado']);
   });
 });

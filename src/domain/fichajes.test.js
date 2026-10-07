@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { ahoraEn, dentroDeGeocerca, distanciaMetros, estadoDia, siguienteTipo, tramosDesdePares } from './fichajes.js';
+import { ahoraEn, dentroDeGeocerca, distanciaMetros, estadoDia, ipEnLista, salidaAutomatica, siguienteTipo, tramosDesdePares, verificarUbicacion } from './fichajes.js';
 
 let n = 0;
 const F = (tipo, minuto) => ({ tipo, minuto, marca: new Date(Date.UTC(2026, 9, 7, 0, 0, n++)).toISOString() });
@@ -84,5 +84,52 @@ describe('geocerca', () => {
     assert.equal(dentroDeGeocerca(cafeteria, { ...cerca, precisionM: 40 }).dentro, true);
     const lejos = { latitud: 40.4155, longitud: -3.7074, precisionM: 5000 };
     assert.equal(dentroDeGeocerca(cafeteria, lejos).dentro, false, 'una precisión enorme no abre la puerta');
+  });
+});
+
+describe('orden y anulados', () => {
+  it('ordena por minuto (una entrada añadida después se coloca en su hora) e ignora los anulados', () => {
+    const salida = F('salida', 720);
+    const entradaAñadida = F('entrada', 480); // creada más tarde que la salida
+    const anulada = { ...F('salida', 600), anuladoEn: new Date().toISOString() };
+    const e = estadoDia([salida, anulada, entradaAñadida]);
+    assert.deepEqual(e.pares, [{ inicio: 480, fin: 720 }]);
+    assert.equal(siguienteTipo([entradaAñadida, anulada]), 'salida');
+  });
+});
+
+describe('salidaAutomatica', () => {
+  it('usa el fin del tramo del turno en el que entró', () => {
+    assert.equal(salidaAutomatica({ entrada: 482, tramosTurno: [{ inicio: 480, fin: 720 }], horasMax: 10 }), 720);
+    const partido = [{ inicio: 540, fin: 720 }, { inicio: 1080, fin: 1200 }];
+    assert.equal(salidaAutomatica({ entrada: 1075, tramosTurno: partido, horasMax: 10 }), 1200);
+  });
+  it('sin turno que encaje: entrada + horas, como máximo 23:59', () => {
+    assert.equal(salidaAutomatica({ entrada: 480, horasMax: 10 }), 1080);
+    assert.equal(salidaAutomatica({ entrada: 900, tramosTurno: [{ inicio: 480, fin: 720 }], horasMax: 10 }), 1439);
+  });
+});
+
+describe('verificarUbicacion', () => {
+  const base = { geocerca: { activa: true, latitud: 40.4168, longitud: -3.7038, radioM: 150 }, red: { activa: true, ips: ['83.45.10.2'] }, sinVerificar: 'revisar' };
+  const cerca = { latitud: 40.4169, longitud: -3.7039, precisionM: 10 };
+  const lejos = { latitud: 40.4155, longitud: -3.7074, precisionM: 10 };
+
+  it('GPS dentro → gps', () => assert.equal(verificarUbicacion(base, { ubicacion: cerca }).verificacion, 'gps'));
+  it('Wi-Fi de la cafetería → red, aunque no haya GPS o el GPS se equivoque', () => {
+    assert.equal(verificarUbicacion(base, { ip: '::ffff:83.45.10.2' }).verificacion, 'red');
+    assert.equal(verificarUbicacion(base, { ubicacion: lejos, ip: '83.45.10.2' }).verificacion, 'red');
+  });
+  it('GPS claramente fuera y sin Wi-Fi → rechazo', () => assert.equal(verificarUbicacion(base, { ubicacion: lejos, ip: '1.1.1.1' }).rechazo, 'FUERA_DE_ZONA'));
+  it('sin GPS ni Wi-Fi → sin_verificar o rechazo según la política', () => {
+    assert.equal(verificarUbicacion(base, { ip: '1.1.1.1' }).verificacion, 'sin_verificar');
+    assert.equal(verificarUbicacion({ ...base, sinVerificar: 'bloquear' }, { ip: '1.1.1.1' }).rechazo, 'SIN_VERIFICAR');
+  });
+  it('sin ningún método activo no verifica nada', () => {
+    assert.deepEqual(verificarUbicacion({ ...base, geocerca: { ...base.geocerca, activa: false }, red: { activa: false, ips: [] } }, {}), { verificacion: null });
+  });
+  it('compara IPs normalizadas', () => {
+    assert.equal(ipEnLista('::FFFF:83.45.10.2', ['83.45.10.2']), true);
+    assert.equal(ipEnLista(undefined, ['83.45.10.2']), false);
   });
 });

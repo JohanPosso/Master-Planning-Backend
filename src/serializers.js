@@ -40,7 +40,7 @@ export const toRegistro = (r) =>
     origen: r.origen === 'fichaje' ? 'fichaje' : undefined,
   });
 
-/** Sin coordenadas: solo la distancia a la cafetería (si había geocerca). */
+/** Sin coordenadas ni IP: solo la distancia y cómo se verificó. Incluye anulados (historial de correcciones). */
 export const toFichaje = (f) =>
   sinVacios({
     id: f.id,
@@ -50,6 +50,11 @@ export const toFichaje = (f) =>
     tipo: f.tipo,
     marca: new Date(f.marca).toISOString(),
     distanciaM: f.distanciaM,
+    origen: f.origen && f.origen !== 'empleada' ? f.origen : undefined,
+    verificacion: f.verificacion,
+    anulado: f.anuladoEn ? new Date(f.anuladoEn).toISOString() : undefined,
+    motivo: f.motivo,
+    sustituyeA: f.sustituyeA,
   });
 
 export const toSemana = (s) => ({ lunes: s.lunes, publicada: s.publicada });

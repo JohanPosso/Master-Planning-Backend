@@ -14,7 +14,12 @@ export function ahoraEn(timeZone, instante = new Date()) {
   return { fecha: `${partes.year}-${partes.month}-${partes.day}`, minuto: (Number(partes.hour) % 24) * 60 + Number(partes.minute) };
 }
 
-const ordenar = (fichajes) => [...fichajes].sort((a, b) => new Date(a.marca) - new Date(b.marca));
+/**
+ * Orden del día: por minuto y, a igualdad, por instante. Así una entrada que el encargado añade a
+ * posteriori se coloca en su hora y no al final. Los anulados no cuentan.
+ */
+const vigentes = (fichajes) => fichajes.filter((f) => !f.anuladoEn);
+const ordenar = (fichajes) => vigentes(fichajes).sort((a, b) => a.minuto - b.minuto || new Date(a.marca) - new Date(b.marca));
 
 /** Lo que toca fichar ahora: tras una entrada, la salida; en cualquier otro caso, la entrada. */
 export function siguienteTipo(fichajesDelDia) {
@@ -83,4 +88,37 @@ export function dentroDeGeocerca(geocerca, ubicacion) {
   const distancia = Math.round(distanciaMetros(geocerca, ubicacion));
   const margen = Math.min(Math.max(ubicacion.precisionM ?? 0, 0), MARGEN_PRECISION_MAX_M);
   return { dentro: distancia - margen <= geocerca.radioM, distancia };
+}
+
+export const MINUTO_MAXIMO = 1439;
+
+/**
+ * Hora de la salida automática cuando se olvidó fichar: el fin del tramo del turno en el que entró
+ * (o el siguiente); sin turno que encaje, entrada + `horasMax`. Nunca pasa de las 23:59 (no hay turnos nocturnos).
+ */
+export function salidaAutomatica({ entrada, tramosTurno = [], horasMax }) {
+  const tramo = tramosTurno.find((t) => t.fin > entrada);
+  return Math.min(tramo ? tramo.fin : entrada + horasMax * 60, MINUTO_MAXIMO);
+}
+
+/** IP sin el prefijo IPv4-mapeado de IPv6 (`::ffff:1.2.3.4` → `1.2.3.4`). */
+export const normalizarIp = (ip) => String(ip ?? '').trim().replace(/^::ffff:/i, '').toLowerCase();
+
+/** ¿La petición viene de una de las redes (IP pública) de la cafetería? */
+export const ipEnLista = (ip, lista = []) => Boolean(ip) && lista.map(normalizarIp).includes(normalizarIp(ip));
+
+/**
+ * Decide cómo queda verificado un fichaje. Orden: GPS dentro → 'gps'; Wi-Fi de la cafetería → 'red'
+ * (aunque el GPS diga «lejos»: dentro de un local el GPS falla); GPS claramente fuera → rechazo;
+ * sin GPS ni Wi-Fi → 'sin_verificar' si la política es «revisar», rechazo si es «bloquear».
+ * Devuelve { verificacion, distancia? } o { rechazo: 'FUERA_DE_ZONA' | 'SIN_VERIFICAR', distancia? }.
+ */
+export function verificarUbicacion(config, { ubicacion, ip }) {
+  const { geocerca, red, sinVerificar } = config;
+  if (!geocerca.activa && !red.activa) return { verificacion: null };
+  const gps = geocerca.activa && ubicacion ? dentroDeGeocerca(geocerca, ubicacion) : null;
+  if (gps?.dentro) return { verificacion: 'gps', distancia: gps.distancia };
+  if (red.activa && ipEnLista(ip, red.ips)) return { verificacion: 'red', distancia: gps?.distancia };
+  if (gps) return { rechazo: 'FUERA_DE_ZONA', distancia: gps.distancia };
+  return sinVerificar === 'bloquear' ? { rechazo: 'SIN_VERIFICAR' } : { verificacion: 'sin_verificar' };
 }

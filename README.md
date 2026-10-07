@@ -61,19 +61,23 @@ test/            Integración con Postgres
 | `GET/POST/DELETE /pagos` · `GET /pagos/calculo` | Nómina |
 | `GET/PATCH /reglas` · `GET/PATCH /ajustes` | Configuración |
 | `GET /portal/fichaje` · `POST /portal/fichajes` | Fichaje de la empleada: resumen del día/semana/historial y fichar `{ tipo, ubicacion? }` |
-| `GET /fichajes?desde&hasta` · `GET /fichajes/novedades?desde` | Fichajes para el encargado (solo lectura) y refresco en vivo |
-| `GET/PUT /fichaje/config` | Geocerca opcional (`{ geocerca: { activa, latitud, longitud, radioM } }`) |
+| `GET /fichajes?desde&hasta` · `GET /fichajes/novedades?desde` | Fichajes para el encargado (incluye anulados) y refresco en vivo |
+| `POST /fichajes` · `PUT /fichajes/:id` · `POST /fichajes/:id/anular` | Correcciones del encargado: añadir, corregir o anular, siempre con `motivo` |
+| `GET/PUT /fichaje/config` · `GET /fichaje/mi-ip` | Geocerca, Wi-Fi de la cafetería, política sin verificar y horas del cierre automático |
 
 Errores: `{ "error": { "code", "message", "details?" } }`.
 
 ## Fichaje (registro de jornada)
 
 - **Hora del servidor** en `APP_TIMEZONE`: la empleada no puede elegirla ni manipular el reloj del móvil.
-- **Solo inserción**: no hay endpoints para editar o borrar fichajes, y `fichajes.empleada_id` es `ON DELETE RESTRICT` (el histórico se conserva aunque la empleada se dé de baja). Las correcciones se hacen en el registro de horas, que deja el fichaje original a la vista.
+- **Nada se borra**: corregir o anular deja el original anulado (`anulado_en` + `motivo`) y enlazado (`sustituye_a`) a su corrección. Las restricciones de la BD obligan a dar motivo. `fichajes.empleada_id` es `ON DELETE RESTRICT`: el histórico se conserva aunque la empleada se dé de baja.
+- **Cierre automático** (`src/jobs/cierreAutomatico.js`, cada 5 min; un lock evita duplicados si hay varias instancias): una entrada abierta más de `cierreAutomaticoHoras` (10 por defecto) recibe una salida `automatico` al fin del tramo de su turno, o a entrada + horas si no tiene turno (como máximo a las 23:59). El día queda «por confirmar» con nota para revisar.
+- **Verificación**, por orden: Wi-Fi de la cafetería (IP pública, sin pedir ubicación) → GPS dentro del radio → si el GPS dice claramente «lejos», rechazo → sin GPS ni Wi-Fi: `sin_verificar` (se deja fichar y se anota) o rechazo, según `sinVerificar`. Requiere `trust proxy` correcto para leer la IP real detrás del proxy del hosting.
 - **Del fichaje al registro**: al fichar la salida se crea o actualiza el registro del día como «por confirmar» (`origen: 'fichaje'`). Si el encargado ya lo confirmó o cambió las horas a mano (`origen: 'manual'`), no se toca. Los tramos contiguos se unen; con más de 2 tramos se unen los huecos más cortos y se deja nota.
 - **Doble toque**: el cliente envía el `tipo` que espera; si no coincide con lo que toca, `409` con `details.toca`. Un *advisory lock* por empleada y día serializa los fichajes simultáneos.
 - **Geocerca opcional** (desactivada por defecto): exige ubicación y rechaza fuera del radio (`403 FUERA_DE_ZONA`), descontando la imprecisión del GPS (máx. 100 m). Solo se expone la distancia; las coordenadas quedan en la BD como prueba.
 - En los tests, `src/utils/reloj.js` permite fijar la hora para simular una jornada.
+- **Despliegue**: aplica las migraciones **antes** de arrancar la versión nueva (la tarea de cierre automático usa las columnas nuevas desde el primer segundo).
 
 ## Producción
 

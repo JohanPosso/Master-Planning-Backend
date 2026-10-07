@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { COLORES, ESTADOS_REGISTRO, ORIGENES_REGISTRO, ROLES, TIPOS_FICHAJE } from './domain/catalogos.js';
+import { COLORES, ESTADOS_REGISTRO, ORIGENES_REGISTRO, POLITICAS_SIN_VERIFICAR, ROLES, TIPOS_FICHAJE } from './domain/catalogos.js';
 import { diasEntre, esFechaIso, esLunes } from './domain/fechas.js';
 import { MINUTOS_DIA, tramosValidos } from './domain/tramos.js';
 
@@ -175,11 +175,26 @@ export const fichajeConfig = z
       longitud: longitud.nullable(),
       radioM: z.number().int().min(25, 'radio mínimo 25 m').max(5000, 'radio máximo 5 km'),
     }),
+    red: z
+      .object({ activa: z.boolean(), ips: z.array(z.string().trim().ip('IP no válida')).max(10).transform((l) => [...new Set(l)]) })
+      .default({ activa: false, ips: [] }),
+    sinVerificar: z.enum(POLITICAS_SIN_VERIFICAR).default('revisar'),
+    cierreAutomaticoHoras: z.number().int().min(4, 'mínimo 4 h').max(16, 'máximo 16 h').default(10),
   })
   .refine((c) => !c.geocerca.activa || (c.geocerca.latitud !== null && c.geocerca.longitud !== null), {
     message: 'para activar la geocerca fija antes la ubicación de la cafetería',
     path: ['geocerca'],
-  });
+  })
+  .refine((c) => !c.red.activa || c.red.ips.length > 0, { message: 'para activar el Wi-Fi añade antes la red de la cafetería', path: ['red'] });
+
+const motivo = z.string().trim().min(3, 'explica el motivo (mínimo 3 caracteres)').max(300);
+const minutoDelDia = z.number().int().min(0).max(1439);
+
+/** El encargado añade un fichaje que faltaba (p. ej. la salida olvidada). */
+export const nuevoFichaje = z.object({ empleadaId: uuid, fecha, tipo: z.enum(TIPOS_FICHAJE), minuto: minutoDelDia, motivo });
+/** Corrige la hora o el tipo: el original queda anulado y enlazado. */
+export const correccionFichaje = z.object({ tipo: z.enum(TIPOS_FICHAJE), minuto: minutoDelDia, motivo });
+export const anulacionFichaje = z.object({ motivo });
 
 // ── Parámetros y acciones ──────────────────────────────────────────────────
 export const idParams = z.object({ id: uuid });

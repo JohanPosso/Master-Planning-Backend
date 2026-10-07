@@ -8,7 +8,16 @@ export const TIPOS_FICHAJE = Object.freeze(['entrada', 'salida']);
 export const ORIGENES_REGISTRO = Object.freeze(['manual', 'fichaje']);
 
 /** Fichaje: la geocerca viene desactivada; el encargado la activa y fija la ubicación en Ajustes. */
-export const FICHAJE_POR_DEFECTO = Object.freeze({ geocerca: { activa: false, latitud: null, longitud: null, radioM: 150 } });
+export const ORIGENES_FICHAJE = Object.freeze(['empleada', 'encargado', 'automatico']);
+export const POLITICAS_SIN_VERIFICAR = Object.freeze(['revisar', 'bloquear']);
+export const FICHAJE_POR_DEFECTO = Object.freeze({
+  geocerca: { activa: false, latitud: null, longitud: null, radioM: 150 },
+  red: { activa: false, ips: [] },
+  /** Sin GPS ni Wi-Fi: 'revisar' deja fichar y lo marca; 'bloquear' no deja. */
+  sinVerificar: 'revisar',
+  /** Un fichaje abierto más de estas horas se cierra solo (olvidó fichar la salida). */
+  cierreAutomaticoHoras: 10,
+});
 
 export const REGLAS_POR_DEFECTO = Object.freeze({
   apertura: { desde: 400, hasta: 1260 },

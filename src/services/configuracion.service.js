@@ -14,8 +14,16 @@ async function fila(transaction, lock = false) {
   return config;
 }
 
+/** Completa con los valores por defecto lo que falte (configuraciones guardadas antes de añadir opciones). */
+const conDefectos = (c = {}) => ({
+  ...FICHAJE_POR_DEFECTO,
+  ...c,
+  geocerca: { ...FICHAJE_POR_DEFECTO.geocerca, ...c.geocerca },
+  red: { ...FICHAJE_POR_DEFECTO.red, ...c.red },
+});
+
 export async function obtenerFichajeConfig(transaction) {
-  return (await fila(transaction)).fichaje ?? FICHAJE_POR_DEFECTO;
+  return conDefectos((await fila(transaction)).fichaje);
 }
 
 /** Sustituye la configuración del fichaje (validada entera: activar la geocerca exige ubicación). */

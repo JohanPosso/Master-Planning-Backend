@@ -14,11 +14,11 @@ router.get('/estado', async (req, res) => {
 });
 
 /** Bloque de fichaje del portal: estado de hoy, turno, semana e historial propio. */
-router.get('/fichaje', async (req, res) => res.json(await resumenFichaje(req.auth.sub)));
+router.get('/fichaje', async (req, res) => res.json(await resumenFichaje(req.auth.sub, { ip: req.ip })));
 
 /** Fichar entrada o salida con la hora del servidor. */
 router.post('/fichajes', validate({ body: schemas.fichar }), async (req, res) => {
-  res.status(201).json(await fichar(req.auth.sub, req.valid.body));
+  res.status(201).json(await fichar(req.auth.sub, { ...req.valid.body, ip: req.ip }));
 });
 
 router.get('/nomina', validate({ query: schemas.periodoQuery }), async (req, res) => {
