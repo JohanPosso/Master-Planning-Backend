@@ -1,6 +1,6 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database.js';
-import { ESTADOS_REGISTRO } from '../domain/catalogos.js';
+import { ESTADOS_REGISTRO, ORIGENES_REGISTRO } from '../domain/catalogos.js';
 import { minutosDe } from '../domain/tramos.js';
 
 const derivarMinutos = (registro) => {
@@ -18,6 +18,8 @@ export const Registro = sequelize.define(
     minutos: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
     nota: { type: DataTypes.TEXT, allowNull: true },
     estado: { type: DataTypes.ENUM(...ESTADOS_REGISTRO), allowNull: false, defaultValue: 'previsto' },
+    /** 'fichaje' si las horas salen de los fichajes de la empleada; 'manual' si las puso el encargado. */
+    origen: { type: DataTypes.STRING(10), allowNull: false, defaultValue: 'manual', validate: { isIn: [ORIGENES_REGISTRO] } },
   },
   {
     tableName: 'registros',

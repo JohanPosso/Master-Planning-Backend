@@ -4,7 +4,7 @@ import request from 'supertest';
 import { createApp } from '../src/app.js';
 import { sequelize } from '../src/config/database.js';
 import { env } from '../src/config/env.js';
-import { REGLAS_POR_DEFECTO } from '../src/domain/catalogos.js';
+import { FICHAJE_POR_DEFECTO, REGLAS_POR_DEFECTO } from '../src/domain/catalogos.js';
 import { runMigrations } from '../src/database/migrate.js';
 import { asegurarAdmin } from '../src/services/auth.service.js';
 
@@ -41,9 +41,9 @@ export function api() {
 export const apiRaw = () => request(app);
 
 export async function limpiarBD() {
-  await sequelize.query('TRUNCATE lineas_pago, periodos_pago, registros, turnos, semanas, plantillas, festivos, empleadas CASCADE');
-  await sequelize.query('UPDATE configuracion SET reglas = CAST(:r AS JSONB), recargo_domingo_pct = 0, recargo_festivo_pct = 0', {
-    replacements: { r: JSON.stringify(REGLAS_POR_DEFECTO) },
+  await sequelize.query('TRUNCATE fichajes, lineas_pago, periodos_pago, registros, turnos, semanas, plantillas, festivos, empleadas CASCADE');
+  await sequelize.query('UPDATE configuracion SET reglas = CAST(:r AS JSONB), fichaje = CAST(:f AS JSONB), recargo_domingo_pct = 0, recargo_festivo_pct = 0', {
+    replacements: { r: JSON.stringify(REGLAS_POR_DEFECTO), f: JSON.stringify(FICHAJE_POR_DEFECTO) },
   });
 }
 

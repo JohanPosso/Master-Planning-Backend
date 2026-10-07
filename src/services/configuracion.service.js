@@ -1,17 +1,30 @@
 import { Op } from 'sequelize';
 import { conTransaccion } from '../config/database.js';
-import { REGLAS_POR_DEFECTO } from '../domain/catalogos.js';
+import { FICHAJE_POR_DEFECTO, REGLAS_POR_DEFECTO } from '../domain/catalogos.js';
 import { Configuracion, Festivo, ID_CONFIGURACION } from '../models/index.js';
 import * as schemas from '../schemas.js';
 
 async function fila(transaction, lock = false) {
   const [config] = await Configuracion.findOrCreate({
     where: { id: ID_CONFIGURACION },
-    defaults: { reglas: REGLAS_POR_DEFECTO },
+    defaults: { reglas: REGLAS_POR_DEFECTO, fichaje: FICHAJE_POR_DEFECTO },
     transaction,
     ...(lock && { lock: transaction.LOCK.UPDATE }),
   });
   return config;
+}
+
+export async function obtenerFichajeConfig(transaction) {
+  return (await fila(transaction)).fichaje ?? FICHAJE_POR_DEFECTO;
+}
+
+/** Sustituye la configuración del fichaje (validada entera: activar la geocerca exige ubicación). */
+export function actualizarFichajeConfig(config, transaction) {
+  return conTransaccion(transaction, async (t) => {
+    const fichaje = schemas.fichajeConfig.parse(config);
+    await (await fila(t, true)).update({ fichaje }, { transaction: t });
+    return fichaje;
+  });
 }
 
 export async function obtenerReglas(transaction) {

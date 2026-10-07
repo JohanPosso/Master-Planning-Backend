@@ -1,6 +1,7 @@
 import { Configuracion, ID_CONFIGURACION } from './Configuracion.js';
 import { Empleada } from './Empleada.js';
 import { Festivo } from './Festivo.js';
+import { Fichaje } from './Fichaje.js';
 import { LineaPago } from './LineaPago.js';
 import { PeriodoPago } from './PeriodoPago.js';
 import { Plantilla } from './Plantilla.js';
@@ -17,6 +18,9 @@ Turno.belongsTo(Plantilla, { as: 'plantilla', foreignKey: 'plantillaId' });
 Empleada.hasMany(Registro, { as: 'registros', foreignKey: 'empleadaId' });
 Registro.belongsTo(Empleada, { as: 'empleada', foreignKey: 'empleadaId' });
 
+Empleada.hasMany(Fichaje, { as: 'fichajes', foreignKey: 'empleadaId' });
+Fichaje.belongsTo(Empleada, { as: 'empleada', foreignKey: 'empleadaId' });
+
 PeriodoPago.hasMany(LineaPago, { as: 'lineas', foreignKey: 'periodoId' });
 LineaPago.belongsTo(PeriodoPago, { as: 'periodo', foreignKey: 'periodoId' });
 LineaPago.belongsTo(Empleada, { as: 'empleada', foreignKey: 'empleadaId' });
@@ -25,6 +29,7 @@ export {
   Configuracion,
   Empleada,
   Festivo,
+  Fichaje,
   ID_CONFIGURACION,
   LineaPago,
   PeriodoPago,

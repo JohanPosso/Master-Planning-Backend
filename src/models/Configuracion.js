@@ -7,6 +7,7 @@ export const Configuracion = sequelize.define(
   {
     id: { type: DataTypes.SMALLINT, primaryKey: true, defaultValue: 1 },
     reglas: { type: DataTypes.JSONB, allowNull: false },
+    fichaje: { type: DataTypes.JSONB, allowNull: false },
     recargoDomingoPct: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
     recargoFestivoPct: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
   },

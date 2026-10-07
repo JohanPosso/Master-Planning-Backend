@@ -8,6 +8,7 @@ import { aplicarSync } from '../services/sync.service.js';
 import auth from './auth.routes.js';
 import configuracion from './configuracion.routes.js';
 import empleadas from './empleadas.routes.js';
+import fichajes from './fichajes.routes.js';
 import pagos from './pagos.routes.js';
 import plantillas from './plantillas.routes.js';
 import portal from './portal.routes.js';
@@ -36,6 +37,7 @@ router.use('/turnos', turnos);
 router.use('/semanas', semanas);
 router.use('/registros', registros);
 router.use('/pagos', pagos);
+router.use('/', fichajes);
 router.use('/', configuracion);
 
 export default router;

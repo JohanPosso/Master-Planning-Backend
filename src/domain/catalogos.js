@@ -4,6 +4,12 @@ export const ROLES = Object.freeze(['Empleada', 'Jefa']);
 export const ESTADOS_REGISTRO = Object.freeze(['previsto', 'confirmado']);
 
 /** Reglas de aviso por defecto (las del diseño: 10 h/día, 40 h/semana, 2 personas 09:00–13:00). */
+export const TIPOS_FICHAJE = Object.freeze(['entrada', 'salida']);
+export const ORIGENES_REGISTRO = Object.freeze(['manual', 'fichaje']);
+
+/** Fichaje: la geocerca viene desactivada; el encargado la activa y fija la ubicación en Ajustes. */
+export const FICHAJE_POR_DEFECTO = Object.freeze({ geocerca: { activa: false, latitud: null, longitud: null, radioM: 150 } });
+
 export const REGLAS_POR_DEFECTO = Object.freeze({
   apertura: { desde: 400, hasta: 1260 },
   franjaVacia: true,

@@ -61,7 +61,7 @@ describe('Empleadas', () => {
 describe('Estado', () => {
   it('devuelve el State completo que consume el frontend', async () => {
     const s = await estado();
-    assert.deepEqual(Object.keys(s).sort(), ['ajustes', 'empleadas', 'pagos', 'plantillas', 'registros', 'reglas', 'semanas', 'turnos', 'version']);
+    assert.deepEqual(Object.keys(s).sort(), ['ajustes', 'empleadas', 'fichaje', 'fichajes', 'pagos', 'plantillas', 'registros', 'reglas', 'semanas', 'turnos', 'version']);
     assert.equal(s.version, 1);
     assert.equal(s.reglas.maxHorasSemana.valor, 40);
     assert.deepEqual(s.ajustes, { recargoDomingoPct: 0, recargoFestivoPct: 0, festivos: [] });

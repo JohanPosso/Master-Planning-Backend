@@ -18,7 +18,8 @@ export function guardarRegistro(empleadaId, fecha, { id, tramos, nota, estado })
     await bloquearHuecos('registro', [{ empleadaId, fecha }], transaction);
     const existente = await Registro.findOne({ where: { empleadaId, fecha }, transaction, lock: transaction.LOCK.UPDATE });
     if (existente) {
-      await existente.update({ tramos, nota, estado }, { transaction });
+      const editadas = JSON.stringify(existente.tramos) !== JSON.stringify(tramos);
+      await existente.update({ tramos, nota, estado, ...(editadas && { origen: 'manual' }) }, { transaction });
       return { registro: toRegistro(existente), creado: false };
     }
     const nuevo = await Registro.create({ id: id ?? randomUUID(), empleadaId, fecha, tramos, nota, estado }, { transaction });

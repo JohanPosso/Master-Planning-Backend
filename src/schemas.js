@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { COLORES, ESTADOS_REGISTRO, ROLES } from './domain/catalogos.js';
+import { COLORES, ESTADOS_REGISTRO, ORIGENES_REGISTRO, ROLES, TIPOS_FICHAJE } from './domain/catalogos.js';
 import { diasEntre, esFechaIso, esLunes } from './domain/fechas.js';
 import { MINUTOS_DIA, tramosValidos } from './domain/tramos.js';
 
@@ -153,10 +153,40 @@ export const ajustes = z.object({
 });
 export const ajustesParcial = ajustes.partial().refine((o) => Object.keys(o).length > 0, 'sin cambios');
 
+// ── Fichaje ────────────────────────────────────────────────────────────────
+const latitud = z.number().min(-90).max(90);
+const longitud = z.number().min(-180).max(180);
+
+/** Ubicación que envía el móvil al fichar (solo si la geocerca está activa). */
+export const ubicacion = z.object({
+  latitud,
+  longitud,
+  precisionM: z.number().min(0).max(100_000).transform(Math.round).optional(),
+});
+
+/** El cliente dice qué cree que está fichando: así un doble toque no ficha entrada y salida seguidas. */
+export const fichar = z.object({ tipo: z.enum(TIPOS_FICHAJE), ubicacion: ubicacion.optional() });
+
+export const fichajeConfig = z
+  .object({
+    geocerca: z.object({
+      activa: z.boolean(),
+      latitud: latitud.nullable(),
+      longitud: longitud.nullable(),
+      radioM: z.number().int().min(25, 'radio mínimo 25 m').max(5000, 'radio máximo 5 km'),
+    }),
+  })
+  .refine((c) => !c.geocerca.activa || (c.geocerca.latitud !== null && c.geocerca.longitud !== null), {
+    message: 'para activar la geocerca fija antes la ubicación de la cafetería',
+    path: ['geocerca'],
+  });
+
 // ── Parámetros y acciones ──────────────────────────────────────────────────
 export const idParams = z.object({ id: uuid });
 export const lunesParams = z.object({ lunes });
 export const registroParams = z.object({ empleadaId: uuid, fecha });
+
+export const desdeQuery = z.object({ desde: fecha });
 
 export const rangoQuery = z
   .object({ desde: fecha.optional(), hasta: fecha.optional() })
@@ -195,7 +225,7 @@ export const sync = z.object({
   plantillas: coleccion(conId(plantilla)),
   semanas: coleccion(z.object({ lunes, publicada: z.boolean() }), lunes),
   turnos: coleccion(conId(turno)),
-  registros: coleccion(conId(registro.omit({ id: true }).extend({ empleadaId: uuid, fecha }))),
+  registros: coleccion(conId(registro.omit({ id: true }).extend({ empleadaId: uuid, fecha, origen: z.enum(ORIGENES_REGISTRO).optional() }))),
   pagos: coleccion(
     z.object({
       id: uuid,

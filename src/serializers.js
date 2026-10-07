@@ -30,7 +30,27 @@ export const toTurno = (t) =>
   });
 
 export const toRegistro = (r) =>
-  sinVacios({ id: r.id, empleadaId: r.empleadaId, fecha: r.fecha, tramos: r.tramos, nota: r.nota, estado: r.estado });
+  sinVacios({
+    id: r.id,
+    empleadaId: r.empleadaId,
+    fecha: r.fecha,
+    tramos: r.tramos,
+    nota: r.nota,
+    estado: r.estado,
+    origen: r.origen === 'fichaje' ? 'fichaje' : undefined,
+  });
+
+/** Sin coordenadas: solo la distancia a la cafetería (si había geocerca). */
+export const toFichaje = (f) =>
+  sinVacios({
+    id: f.id,
+    empleadaId: f.empleadaId,
+    fecha: f.fecha,
+    minuto: f.minuto,
+    tipo: f.tipo,
+    marca: new Date(f.marca).toISOString(),
+    distanciaM: f.distanciaM,
+  });
 
 export const toSemana = (s) => ({ lunes: s.lunes, publicada: s.publicada });
 
