@@ -104,8 +104,29 @@ export function salidaAutomatica({ entrada, tramosTurno = [], horasMax }) {
 /** IP sin el prefijo IPv4-mapeado de IPv6 (`::ffff:1.2.3.4` → `1.2.3.4`). */
 export const normalizarIp = (ip) => String(ip ?? '').trim().replace(/^::ffff:/i, '').toLowerCase();
 
-/** ¿La petición viene de una de las redes (IP pública) de la cafetería? */
-export const ipEnLista = (ip, lista = []) => Boolean(ip) && lista.map(normalizarIp).includes(normalizarIp(ip));
+/** IPv6 completa en 8 grupos de 4 cifras (`2a0c:5a80::1` → `2a0c:5a80:0000:…:0001`); null si no es IPv6. */
+export function expandirIpv6(ip) {
+  const v = normalizarIp(ip);
+  if (!v.includes(':') || !/^[0-9a-f:]+$/.test(v) || (v.match(/::/g)?.length ?? 0) > 1) return null;
+  const [izq, der] = v.split('::');
+  const a = izq ? izq.split(':') : [];
+  const b = der !== undefined ? (der ? der.split(':') : []) : [];
+  const grupos = der !== undefined ? [...a, ...Array(8 - a.length - b.length).fill('0'), ...b] : a;
+  if (grupos.length !== 8 || grupos.some((g) => g.length > 4)) return null;
+  return grupos.map((g) => g.padStart(4, '0')).join(':');
+}
+
+/**
+ * Identidad de la red de una IP: en IPv4 la IP pública del router; en IPv6 el prefijo /64, porque cada
+ * dispositivo de un mismo Wi-Fi tiene su propia dirección dentro de ese prefijo.
+ */
+export function redDeIp(ip) {
+  const v6 = expandirIpv6(ip);
+  return v6 ? `${v6.split(':').slice(0, 4).join(':')}::/64` : normalizarIp(ip);
+}
+
+/** ¿La petición viene de una de las redes de la cafetería? (IPv4 exacta; IPv6 por prefijo /64). */
+export const ipEnLista = (ip, lista = []) => Boolean(ip) && lista.map(redDeIp).includes(redDeIp(ip));
 
 /**
  * Decide cómo queda verificado un fichaje. Orden: GPS dentro → 'gps'; Wi-Fi de la cafetería → 'red'

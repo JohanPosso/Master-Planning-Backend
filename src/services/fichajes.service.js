@@ -3,7 +3,7 @@ import { Op } from 'sequelize';
 import { sequelize } from '../config/database.js';
 import { env } from '../config/env.js';
 import { logger } from '../config/logger.js';
-import { ahoraEn, estadoDia, ipEnLista, normalizarIp, salidaAutomatica, siguienteTipo, tramosDesdePares, verificarUbicacion } from '../domain/fichajes.js';
+import { ahoraEn, estadoDia, ipEnLista, normalizarIp, redDeIp, salidaAutomatica, siguienteTipo, tramosDesdePares, verificarUbicacion } from '../domain/fichajes.js';
 import { diaSemana, sumarDias } from '../domain/fechas.js';
 import { minutosDe } from '../domain/tramos.js';
 import { Empleada, Fichaje, Registro, Turno } from '../models/index.js';
@@ -70,11 +70,13 @@ async function sincronizarRegistro(empleadaId, fecha, transaction, { forzar = fa
   return existente.update({ tramos, nota, origen: 'fichaje' }, { transaction });
 }
 
+/** Con el Wi-Fi activo, el mensaje dice qué red ve el servidor: así se sabe al momento si es otra IP (p. ej. IPv6). */
+const notaRed = (d) => (d.red ? ` Tu conexión llega desde ${d.red}, que no es la del Wi-Fi de la cafetería.` : '');
 const RECHAZOS = {
   FUERA_DE_ZONA: (d) =>
-    new AppError(403, 'FUERA_DE_ZONA', `Estás a ${d.distancia} m de la cafetería. Acércate o conéctate a su Wi-Fi para fichar.`, { distanciaM: d.distancia }),
-  SIN_VERIFICAR: () =>
-    new AppError(400, 'UBICACION_REQUERIDA', 'No se pudo comprobar que estés en la cafetería: activa la ubicación o conéctate a su Wi-Fi.'),
+    new AppError(403, 'FUERA_DE_ZONA', `Estás a ${d.distancia} m de la cafetería. Acércate o conéctate a su Wi-Fi para fichar.${notaRed(d)}`, { distanciaM: d.distancia, redDetectada: d.red }),
+  SIN_VERIFICAR: (d) =>
+    new AppError(400, 'UBICACION_REQUERIDA', `No se pudo comprobar que estés en la cafetería: activa la ubicación o conéctate a su Wi-Fi.${notaRed(d)}`, { redDetectada: d.red }),
 };
 
 /**
@@ -90,7 +92,7 @@ export function fichar(empleadaId, { tipo, ubicacion, ip }) {
 
     const config = await obtenerFichajeConfig(transaction);
     const v = verificarUbicacion(config, { ubicacion, ip });
-    if (v.rechazo) throw RECHAZOS[v.rechazo](v);
+    if (v.rechazo) throw RECHAZOS[v.rechazo]({ ...v, red: config.red.activa && ip ? redDeIp(ip) : null });
 
     const delDia = await fichajesDelDia(empleadaId, fecha, transaction);
     const toca = siguienteTipo(delDia);
@@ -181,6 +183,8 @@ export async function resumenFichaje(empleadaId, { dias = 14, ip } = {}) {
     red: { activa: config.red.activa },
     // En el Wi-Fi de la cafetería no hace falta pedir la ubicación al móvil.
     enRedCafeteria: config.red.activa && ipEnLista(ip, config.red.ips),
+    // Diagnóstico: la red que ve el servidor (solo si el fichaje por Wi-Fi está activo). Es la propia de quien consulta.
+    redDetectada: config.red.activa && ip ? redDeIp(ip) : null,
     cierreAutomaticoHoras: config.cierreAutomaticoHoras,
   };
 }

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { normalizarIp } from '../domain/fichajes.js';
+import { normalizarIp, redDeIp } from '../domain/fichajes.js';
 import { validate } from '../middleware/validate.js';
 import * as schemas from '../schemas.js';
 import { actualizarFichajeConfig, obtenerFichajeConfig } from '../services/configuracion.service.js';
@@ -28,6 +28,6 @@ router.get('/fichaje/config', async (_req, res) => res.json(await obtenerFichaje
 router.put('/fichaje/config', validate({ body: schemas.fichajeConfig }), async (req, res) => res.json(await actualizarFichajeConfig(req.valid.body)));
 
 /** IP pública desde la que conecta el encargado: con «Usar la red actual» se guarda la del Wi-Fi de la cafetería. */
-router.get('/fichaje/mi-ip', (req, res) => res.json({ ip: normalizarIp(req.ip) }));
+router.get('/fichaje/mi-ip', (req, res) => res.json({ ip: normalizarIp(req.ip), red: redDeIp(req.ip) }));
 
 export default router;

@@ -332,3 +332,28 @@ describe('Correcciones del encargado', () => {
     assert.deepEqual([r.body.registro.tramos, r.body.registro.estado], [tramo(480, 720), 'confirmado']);
   });
 });
+
+describe('Diagnóstico de red', () => {
+  const CAFETERIA = { latitud: 40.4168, longitud: -3.7038 };
+
+  it('si no reconoce el Wi-Fi, el rechazo y el resumen dicen qué red ve el servidor', async () => {
+    await api().put('/api/fichaje/config').send({ geocerca: { activa: true, ...CAFETERIA, radioM: 150 }, red: { activa: true, ips: ['185.250.76.217'] } }).expect(200);
+    const yo = await empleadaConPortal();
+    a('08:00');
+    const r = (await yo.resumen().expect(200)).body;
+    assert.deepEqual([r.enRedCafeteria, r.redDetectada], [false, '127.0.0.1']);
+    const lejos = await yo.fichar('entrada', { ubicacion: { latitud: 40.4155, longitud: -3.7074, precisionM: 10 } }).expect(403);
+    assert.match(lejos.body.error.message, /llega desde 127\.0\.0\.1/);
+    assert.equal(lejos.body.error.details.redDetectada, '127.0.0.1');
+  });
+
+  it('sin Wi-Fi activo no expone la red', async () => {
+    const yo = await empleadaConPortal();
+    a('08:00');
+    assert.equal((await yo.resumen().expect(200)).body.redDetectada, null);
+  });
+
+  it('mi-ip devuelve también la red', async () => {
+    assert.deepEqual((await api().get('/api/fichaje/mi-ip').expect(200)).body, { ip: '127.0.0.1', red: '127.0.0.1' });
+  });
+});

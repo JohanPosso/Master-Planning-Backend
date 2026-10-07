@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { ahoraEn, dentroDeGeocerca, distanciaMetros, estadoDia, ipEnLista, salidaAutomatica, siguienteTipo, tramosDesdePares, verificarUbicacion } from './fichajes.js';
+import { ahoraEn, dentroDeGeocerca, distanciaMetros, estadoDia, expandirIpv6, ipEnLista, redDeIp, salidaAutomatica, siguienteTipo, tramosDesdePares, verificarUbicacion } from './fichajes.js';
 
 let n = 0;
 const F = (tipo, minuto) => ({ tipo, minuto, marca: new Date(Date.UTC(2026, 9, 7, 0, 0, n++)).toISOString() });
@@ -131,5 +131,26 @@ describe('verificarUbicacion', () => {
   it('compara IPs normalizadas', () => {
     assert.equal(ipEnLista('::FFFF:83.45.10.2', ['83.45.10.2']), true);
     assert.equal(ipEnLista(undefined, ['83.45.10.2']), false);
+  });
+});
+
+describe('redes IPv6', () => {
+  it('expande IPv6 abreviadas y rechaza lo que no lo es', () => {
+    assert.equal(expandirIpv6('2a0c:5a80::1'), '2a0c:5a80:0000:0000:0000:0000:0000:0001');
+    assert.equal(expandirIpv6('::1'), '0000:0000:0000:0000:0000:0000:0000:0001');
+    assert.equal(expandirIpv6('185.250.76.217'), null);
+    assert.equal(expandirIpv6('1::2::3'), null);
+  });
+
+  it('dos móviles en el mismo Wi-Fi (mismo /64, distinta dirección) son la misma red', () => {
+    const guardada = '2a0c:5a80:1234:5678:aaaa:bbbb:cccc:dddd'; // la del encargado al pulsar «Usar la red actual»
+    assert.equal(ipEnLista('2a0c:5a80:1234:5678:1111:2222:3333:4444', [guardada]), true);
+    assert.equal(ipEnLista('2a0c:5a80:1234:9999:1111:2222:3333:4444', [guardada]), false, 'otro /64: otra red');
+    assert.equal(redDeIp('2A0C:5A80:1234:5678::1'), '2a0c:5a80:1234:5678::/64');
+  });
+
+  it('IPv4 sigue comparándose exacta', () => {
+    assert.equal(ipEnLista('185.250.76.217', ['185.250.76.217']), true);
+    assert.equal(ipEnLista('185.250.76.218', ['185.250.76.217']), false);
   });
 });

@@ -28,6 +28,12 @@ function leerEnv(source = process.env) {
     corsOrigin: lista(source.CORS_ORIGIN ?? 'http://localhost:5173'),
     timezone: source.APP_TIMEZONE ?? 'Europe/Madrid',
     jwtSecret,
+    /**
+     * Proxies delante de la API (Railway, Render, Nginx…). Con el valor correcto, req.ip es la IP pública
+     * de quien ficha; si está mal, se ve la de un proxy y el fichaje por Wi-Fi no reconoce la red.
+     * Número de saltos ('1'), 'true' para confiar en todos o una lista de IPs/subredes.
+     */
+    trustProxy: (() => { const v = source.TRUST_PROXY ?? '1'; return v === 'true' ? true : v === 'false' ? false : /^\d+$/.test(v) ? Number(v) : v; })(),
     /** Duración de la sesión desde que se entra (luego hay que volver a entrar). */
     jwtExpiresIn: source.JWT_EXPIRES_IN ?? '1h',
     adminUser: source.ADMIN_USER ?? 'admin',
