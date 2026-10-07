@@ -1,3 +1,6 @@
+# Nombre fijo: renombrar la carpeta no crea una BD nueva y vacía (el volumen sigue siendo jornada-backend_jornada-data).
+name: jornada-backend
+
 services:
   db:
     image: postgres:16-alpine
