@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { Op, fn, col, where } from 'sequelize';
 import { env } from '../config/env.js';
 import { Empleada, UsuarioAdmin } from '../models/index.js';
-import { conflict, forbidden, unauthorized } from '../utils/errors.js';
+import { AppError, conflict, forbidden, unauthorized } from '../utils/errors.js';
 
 const ROUNDS = 10;
 
@@ -28,12 +28,29 @@ export function firmarToken(payload) {
   return jwt.sign(payload, env.jwtSecret, { expiresIn: env.jwtExpiresIn });
 }
 
+/** Duración máxima de una sesión en segundos, derivada de JWT_EXPIRES_IN ('1h', '30m'…). */
+const DURACION_SESION_S = (() => { const p = jwt.decode(jwt.sign({}, 'x', { expiresIn: env.jwtExpiresIn })); return p.exp - p.iat; })();
+
+/**
+ * Instante en que caduca la sesión: lo que antes ocurra entre la caducidad del token y la duración
+ * actual contada desde que se entró. Así acortar la duración afecta también a las sesiones ya abiertas.
+ */
+const caducidadS = (p) => Math.min(p.exp ?? Infinity, (p.iat ?? 0) + DURACION_SESION_S);
+export const caducidadDe = (tokenOPayload) =>
+  new Date(caducidadS(typeof tokenOPayload === 'string' ? jwt.decode(tokenOPayload) : tokenOPayload) * 1000).toISOString();
+
+const sesionCaducada = () => new AppError(401, 'SESION_CADUCADA', 'Tu sesión ha caducado. Vuelve a entrar.');
+
 export function verificarToken(token) {
+  let payload;
   try {
-    return jwt.verify(token, env.jwtSecret);
-  } catch {
-    throw unauthorized('Sesión no válida o caducada');
+    payload = jwt.verify(token, env.jwtSecret);
+  } catch (err) {
+    if (err instanceof jwt.TokenExpiredError) throw sesionCaducada();
+    throw unauthorized('Sesión no válida');
   }
+  if (Date.now() / 1000 >= caducidadS(payload)) throw sesionCaducada();
+  return payload;
 }
 
 export async function asegurarAdmin() {
@@ -80,7 +97,7 @@ export async function login({ usuario, password }) {
   const admin = await UsuarioAdmin.findOne({ where: where(fn('lower', col('usuario')), nombre) });
   if (admin && (await verificarPassword(clave, admin.passwordHash))) {
     const token = firmarToken({ rol: 'admin', sub: admin.id });
-    return { token, rol: 'admin', perfil: perfilAdmin(admin) };
+    return { token, rol: 'admin', perfil: perfilAdmin(admin), expiraEn: caducidadDe(token) };
   }
 
   const empleada = await Empleada.findOne({
@@ -91,7 +108,7 @@ export async function login({ usuario, password }) {
   if (empleada && empleada.passwordHash && (await verificarPassword(clave, empleada.passwordHash))) {
     if (!empleada.activa) throw forbidden('Tu cuenta está inactiva. Habla con el encargado.');
     const token = firmarToken({ rol: 'empleada', sub: empleada.id });
-    return { token, rol: 'empleada', perfil: perfilEmpleada(empleada) };
+    return { token, rol: 'empleada', perfil: perfilEmpleada(empleada), expiraEn: caducidadDe(token) };
   }
 
   throw unauthorized('Usuario o contraseña incorrectos');

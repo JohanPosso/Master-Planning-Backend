@@ -77,6 +77,7 @@ Errores: `{ "error": { "code", "message", "details?" } }`.
 - **Doble toque**: el cliente envía el `tipo` que espera; si no coincide con lo que toca, `409` con `details.toca`. Un *advisory lock* por empleada y día serializa los fichajes simultáneos.
 - **Geocerca opcional** (desactivada por defecto): exige ubicación y rechaza fuera del radio (`403 FUERA_DE_ZONA`), descontando la imprecisión del GPS (máx. 100 m). Solo se expone la distancia; las coordenadas quedan en la BD como prueba.
 - En los tests, `src/utils/reloj.js` permite fijar la hora para simular una jornada.
+- **Sesión**: dura `JWT_EXPIRES_IN` (1 h por defecto) desde que se entra. El servidor la cuenta desde `iat`, así que acortarla afecta también a las sesiones ya abiertas. Una sesión caducada responde `401 SESION_CADUCADA`, y el login y `/auth/me` devuelven `expiraEn`.
 - **Despliegue**: aplica las migraciones **antes** de arrancar la versión nueva (la tarea de cierre automático usa las columnas nuevas desde el primer segundo).
 
 ## Producción

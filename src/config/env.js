@@ -28,7 +28,8 @@ function leerEnv(source = process.env) {
     corsOrigin: lista(source.CORS_ORIGIN ?? 'http://localhost:5173'),
     timezone: source.APP_TIMEZONE ?? 'Europe/Madrid',
     jwtSecret,
-    jwtExpiresIn: source.JWT_EXPIRES_IN ?? '7d',
+    /** Duración de la sesión desde que se entra (luego hay que volver a entrar). */
+    jwtExpiresIn: source.JWT_EXPIRES_IN ?? '1h',
     adminUser: source.ADMIN_USER ?? 'admin',
     adminPassword: source.ADMIN_PASSWORD ?? 'admin123',
     database: Object.freeze(database),

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { validate } from '../middleware/validate.js';
 import { requireAuth } from '../middleware/auth.js';
 import * as schemas from '../schemas.js';
-import { login } from '../services/auth.service.js';
+import { caducidadDe, login } from '../services/auth.service.js';
 
 const router = Router();
 
@@ -11,7 +11,7 @@ router.post('/login', validate({ body: schemas.login }), async (req, res) => {
 });
 
 router.get('/me', requireAuth, (req, res) => {
-  res.json({ rol: req.auth.rol, perfil: req.auth.perfil });
+  res.json({ rol: req.auth.rol, perfil: req.auth.perfil, expiraEn: caducidadDe(req.auth) });
 });
 
 router.post('/logout', (_req, res) => res.status(204).end());

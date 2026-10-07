@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import jwt from 'jsonwebtoken';
+import { env } from '../src/config/env.js';
 import { after, before, beforeEach, describe, test } from 'node:test';
 import { api, apiRaw, cerrarBD, crearEmpleada, crearTurno, limpiarBD, loginComo, prepararBD, tramo, uuid } from './helpers.js';
 
@@ -163,5 +165,24 @@ describe('auth y portal', () => {
   test('health sigue público', async () => {
     const res = await apiRaw().get('/api/health');
     assert.equal(res.status, 200);
+  });
+  test('la sesión dura 1 hora desde que se entra y /me dice cuándo caduca', async () => {
+    const antes = Date.now();
+    const s = await loginComo(env.adminUser, env.adminPassword);
+    const dura = Date.parse(s.expiraEn) - antes;
+    assert.ok(dura > 59 * 60_000 && dura <= 61 * 60_000, `dura ${dura} ms`);
+    const me = await apiRaw().get('/api/auth/me').set('Authorization', `Bearer ${s.token}`).expect(200);
+    assert.equal(me.body.expiraEn, s.expiraEn);
+  });
+
+  test('una sesión caducada responde 401 SESION_CADUCADA (no «no válida»)', async () => {
+    const caducado = jwt.sign({ rol: 'admin', sub: uuid(), exp: Math.floor(Date.now() / 1000) - 10 }, env.jwtSecret);
+    const r = await apiRaw().get('/api/estado').set('Authorization', `Bearer ${caducado}`).expect(401);
+    assert.equal(r.body.error.code, 'SESION_CADUCADA');
+    // Una sesión antigua firmada para 7 días deja de valer al pasar 1 h desde que se entró.
+    const antigua = jwt.sign({ rol: 'admin', sub: uuid(), iat: Math.floor(Date.now() / 1000) - 3700 }, env.jwtSecret, { expiresIn: '7d' });
+    assert.equal((await apiRaw().get('/api/estado').set('Authorization', `Bearer ${antigua}`).expect(401)).body.error.code, 'SESION_CADUCADA');
+    const falso = await apiRaw().get('/api/estado').set('Authorization', 'Bearer xxx.yyy.zzz').expect(401);
+    assert.equal(falso.body.error.code, 'UNAUTHORIZED');
   });
 });
