@@ -21,6 +21,7 @@ export const FICHAJE_POR_DEFECTO = Object.freeze({
 
 export const REGLAS_POR_DEFECTO = Object.freeze({
   apertura: { desde: 400, hasta: 1260 },
+  cierres: [{ desde: 840, hasta: 1020 }],
   franjaVacia: true,
   minPersonas: { activa: true, desde: 540, hasta: 780, valor: 2 },
   maxHorasDia: { activa: true, valor: 10 },

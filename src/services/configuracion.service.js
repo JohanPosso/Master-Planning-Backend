@@ -15,15 +15,25 @@ async function fila(transaction, lock = false) {
 }
 
 /** Completa con los valores por defecto lo que falte (configuraciones guardadas antes de añadir opciones). */
-const conDefectos = (c = {}) => ({
+const conDefectosFichaje = (c = {}) => ({
   ...FICHAJE_POR_DEFECTO,
   ...c,
   geocerca: { ...FICHAJE_POR_DEFECTO.geocerca, ...c.geocerca },
   red: { ...FICHAJE_POR_DEFECTO.red, ...c.red },
 });
 
+const conDefectosReglas = (r = {}) => ({
+  ...REGLAS_POR_DEFECTO,
+  ...r,
+  apertura: { ...REGLAS_POR_DEFECTO.apertura, ...r.apertura },
+  cierres: Array.isArray(r.cierres) ? r.cierres : REGLAS_POR_DEFECTO.cierres,
+  minPersonas: { ...REGLAS_POR_DEFECTO.minPersonas, ...r.minPersonas },
+  maxHorasDia: { ...REGLAS_POR_DEFECTO.maxHorasDia, ...r.maxHorasDia },
+  maxHorasSemana: { ...REGLAS_POR_DEFECTO.maxHorasSemana, ...r.maxHorasSemana },
+});
+
 export async function obtenerFichajeConfig(transaction) {
-  return conDefectos((await fila(transaction)).fichaje);
+  return conDefectosFichaje((await fila(transaction)).fichaje);
 }
 
 /** Sustituye la configuración del fichaje (validada entera: activar la geocerca exige ubicación). */
@@ -36,7 +46,7 @@ export function actualizarFichajeConfig(config, transaction) {
 }
 
 export async function obtenerReglas(transaction) {
-  return (await fila(transaction)).reglas;
+  return conDefectosReglas((await fila(transaction)).reglas);
 }
 
 export async function obtenerAjustes(transaction) {
@@ -53,7 +63,7 @@ export async function obtenerAjustes(transaction) {
 export function actualizarReglas(parcial, transaction) {
   return conTransaccion(transaction, async (t) => {
     const config = await fila(t, true);
-    const reglas = schemas.reglas.parse({ ...config.reglas, ...parcial });
+    const reglas = schemas.reglas.parse(conDefectosReglas({ ...config.reglas, ...parcial }));
     await config.update({ reglas }, { transaction: t });
     return reglas;
   });

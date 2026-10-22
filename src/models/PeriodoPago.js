@@ -6,7 +6,7 @@ export const PeriodoPago = sequelize.define(
   'PeriodoPago',
   {
     id: { type: DataTypes.UUID, primaryKey: true, defaultValue: DataTypes.UUIDV4 },
-    inicio: { type: DataTypes.DATEONLY, allowNull: false, unique: true },
+    inicio: { type: DataTypes.DATEONLY, allowNull: false },
     fin: { type: DataTypes.DATEONLY, allowNull: false },
     etiqueta: { type: DataTypes.STRING(60), allowNull: false },
     pagadoEn: { type: DataTypes.DATE, allowNull: false },

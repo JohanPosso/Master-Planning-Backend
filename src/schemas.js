@@ -127,9 +127,14 @@ export const registro = z.object({
 });
 
 const reglaActivaValor = (max) => z.object({ activa: z.boolean(), valor: z.number().min(0).max(max) });
+const franjaMinutos = z.object({ desde: minuto, hasta: minuto }).refine((f) => f.hasta > f.desde, {
+  message: 'el fin debe ser posterior al inicio',
+});
+
 export const reglas = z
   .object({
     apertura: z.object({ desde: minuto, hasta: minuto }),
+    cierres: z.array(franjaMinutos).max(5).default([]),
     franjaVacia: z.boolean(),
     minPersonas: z.object({ activa: z.boolean(), desde: minuto, hasta: minuto, valor: z.number().int().min(1).max(50) }),
     maxHorasDia: reglaActivaValor(24),
@@ -214,7 +219,13 @@ const periodo = z
 export const periodoQuery = periodo;
 
 export const pagarPeriodo = z
-  .object({ id: uuid.optional(), inicio: fecha, fin: fecha, etiqueta: z.string().trim().min(1).max(60) })
+  .object({
+    id: uuid.optional(),
+    inicio: fecha,
+    fin: fecha,
+    etiqueta: z.string().trim().min(1).max(60),
+    empleadaIds: z.array(uuid).min(1).max(100).optional(),
+  })
   .and(periodo);
 
 export const moverTurno = z.object({ empleadaId: uuid, fecha, duplicar: z.boolean().default(false), nuevoId: uuid.optional() });
