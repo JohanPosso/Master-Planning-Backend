@@ -67,6 +67,31 @@ export const toLineaPago = (l) => ({
   importeCent: l.importeCent,
 });
 
+export const toAdelanto = (a) =>
+  sinVacios({
+    id: a.id,
+    empleadaId: a.empleadaId,
+    montoCent: a.montoCent,
+    saldoCent: a.saldoCent,
+    nota: a.nota,
+    creadoEn: new Date(a.createdAt ?? a.creadoEn).toISOString(),
+  });
+
+export const toMovimiento = (m) =>
+  sinVacios({
+    id: m.id,
+    tipo: m.tipo,
+    entidad: m.entidad,
+    entidadId: m.entidadId,
+    empleadaId: m.empleadaId,
+    actorTipo: m.actorTipo,
+    actorId: m.actorId,
+    actorNombre: m.actorNombre,
+    resumen: m.resumen,
+    detalle: m.detalle ?? {},
+    creadoEn: new Date(m.creadoEn).toISOString(),
+  });
+
 export const toPago = (p) => ({
   id: p.id,
   inicio: p.inicio,
@@ -74,6 +99,7 @@ export const toPago = (p) => ({
   etiqueta: p.etiqueta,
   pagadoEn: new Date(p.pagadoEn).toISOString(),
   totalCent: p.totalCent,
+  adelantoDescontadoCent: p.adelantoDescontadoCent ?? 0,
   // Orden estable (mayor importe primero) para que POST y GET devuelvan lo mismo.
   lineas: (p.lineas ?? []).map(toLineaPago).sort((a, b) => b.importeCent - a.importeCent || a.empleadaId.localeCompare(b.empleadaId)),
 });

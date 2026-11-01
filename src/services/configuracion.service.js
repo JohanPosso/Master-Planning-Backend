@@ -3,6 +3,7 @@ import { conTransaccion } from '../config/database.js';
 import { FICHAJE_POR_DEFECTO, REGLAS_POR_DEFECTO } from '../domain/catalogos.js';
 import { Configuracion, Festivo, ID_CONFIGURACION } from '../models/index.js';
 import * as schemas from '../schemas.js';
+import { registrarMovimiento } from './auditoria.service.js';
 
 async function fila(transaction, lock = false) {
   const [config] = await Configuracion.findOrCreate({
@@ -41,6 +42,10 @@ export function actualizarFichajeConfig(config, transaction) {
   return conTransaccion(transaction, async (t) => {
     const fichaje = schemas.fichajeConfig.parse(config);
     await (await fila(t, true)).update({ fichaje }, { transaction: t });
+    await registrarMovimiento(
+      { tipo: 'fichaje_config.actualizar', resumen: 'Actualizada configuración de fichaje', detalle: { geocerca: fichaje.geocerca?.activa, red: fichaje.red?.activa } },
+      { transaction: t },
+    );
     return fichaje;
   });
 }
@@ -65,6 +70,10 @@ export function actualizarReglas(parcial, transaction) {
     const config = await fila(t, true);
     const reglas = schemas.reglas.parse(conDefectosReglas({ ...config.reglas, ...parcial }));
     await config.update({ reglas }, { transaction: t });
+    await registrarMovimiento(
+      { tipo: 'reglas.actualizar', resumen: 'Actualizadas reglas de horario', detalle: { claves: Object.keys(parcial) } },
+      { transaction: t },
+    );
     return reglas;
   });
 }
@@ -83,6 +92,10 @@ export function actualizarAjustes(parcial, transaction) {
     const { festivos, ...recargos } = parcial;
     if (Object.keys(recargos).length) await config.update(recargos, { transaction: t });
     if (festivos) await reemplazarFestivos(festivos, t);
+    await registrarMovimiento(
+      { tipo: 'ajustes.actualizar', resumen: 'Actualizados ajustes de nómina', detalle: { claves: Object.keys(parcial) } },
+      { transaction: t },
+    );
     return obtenerAjustes(t);
   });
 }

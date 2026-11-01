@@ -228,6 +228,24 @@ export const pagarPeriodo = z
   })
   .and(periodo);
 
+export const crearAdelanto = z.object({
+  id: uuid.optional(),
+  empleadaId: uuid,
+  montoCent: z.number().int().min(1).max(10_000_000),
+  nota: z.string().trim().max(120).nullish().transform((v) => v || null),
+});
+
+export const movimientosQuery = z
+  .object({
+    desde: z.string().datetime({ offset: true }).optional(),
+    hasta: z.string().datetime({ offset: true }).optional(),
+    tipo: z.string().trim().min(1).max(60).optional(),
+    empleadaId: uuid.optional(),
+    limit: z.coerce.number().int().min(1).max(200).optional(),
+    offset: z.coerce.number().int().min(0).optional(),
+  })
+  .refine((q) => !q.desde || !q.hasta || q.hasta >= q.desde, 'hasta debe ser posterior a desde');
+
 export const moverTurno = z.object({ empleadaId: uuid, fecha, duplicar: z.boolean().default(false), nuevoId: uuid.optional() });
 export const turnoDesdePlantilla = z.object({ id: uuid.optional(), plantillaId: uuid, empleadaId: uuid, fecha });
 export const publicarSemana = z.object({ publicada: z.boolean() });
@@ -260,7 +278,18 @@ export const sync = z.object({
       etiqueta: z.string().trim().min(1).max(60),
       pagadoEn: z.string().datetime({ offset: true }),
       totalCent: z.number().int().min(0),
+      adelantoDescontadoCent: z.number().int().min(0).default(0),
       lineas: z.array(lineaPago).max(500),
+    }),
+  ),
+  adelantos: coleccion(
+    z.object({
+      id: uuid,
+      empleadaId: uuid,
+      montoCent: z.number().int().min(1),
+      saldoCent: z.number().int().min(0),
+      nota: z.string().trim().max(120).nullish(),
+      creadoEn: z.string().datetime({ offset: true }),
     }),
   ),
   reglas: reglas.optional(),

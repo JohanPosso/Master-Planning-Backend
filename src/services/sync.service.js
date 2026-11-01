@@ -1,6 +1,7 @@
 import { sequelize } from '../config/database.js';
-import { Empleada, LineaPago, PeriodoPago, Plantilla, Registro, Semana, Turno } from '../models/index.js';
+import { Adelanto, Empleada, LineaPago, PeriodoPago, Plantilla, Registro, Semana, Turno } from '../models/index.js';
 import { upsertById } from '../utils/repository.js';
+import { registrarMovimiento } from './auditoria.service.js';
 import { actualizarAjustes, actualizarReglas } from './configuracion.service.js';
 import { plantillaVigente } from './turnos.service.js';
 
@@ -21,6 +22,7 @@ export function aplicarSync(ops) {
     await borrar(Registro, ops.registros?.delete);
     await borrar(Turno, ops.turnos?.delete);
     await borrar(PeriodoPago, ops.pagos?.delete);
+    await borrar(Adelanto, ops.adelantos?.delete);
     await borrar(Semana, ops.semanas?.delete, 'lunes');
     await borrar(Plantilla, ops.plantillas?.delete);
     await borrar(Empleada, ops.empleadas?.delete);
@@ -41,9 +43,29 @@ export function aplicarSync(ops) {
       await LineaPago.destroy({ where: { periodoId: id }, ...opts });
       await LineaPago.bulkCreate(lineas.map((l) => ({ ...l, periodoId: id })), opts);
     }
+    for (const { id, creadoEn, ...datos } of ops.adelantos?.upsert ?? []) {
+      await upsertById(Adelanto, id, { ...datos, createdAt: creadoEn ? new Date(creadoEn) : undefined }, opts);
+    }
 
     if (ops.reglas) resumen.reglas = await actualizarReglas(ops.reglas, transaction);
     if (ops.ajustes) resumen.ajustes = await actualizarAjustes(ops.ajustes, transaction);
+
+    const tocadas = Object.entries(ops)
+      .filter(([, v]) => v && (Array.isArray(v.upsert) || Array.isArray(v.delete) || typeof v === 'object'))
+      .map(([k]) => k);
+    await registrarMovimiento(
+      {
+        tipo: 'sync.aplicar',
+        resumen: `Deshacer / sync · ${tocadas.join(', ') || 'sin cambios'}`,
+        detalle: {
+          colecciones: tocadas,
+          counts: Object.fromEntries(
+            tocadas.map((k) => [k, { upsert: ops[k]?.upsert?.length ?? 0, delete: ops[k]?.delete?.length ?? 0 }]),
+          ),
+        },
+      },
+      { transaction },
+    );
     return { ok: true, ...resumen };
   });
 }

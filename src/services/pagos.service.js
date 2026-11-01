@@ -7,6 +7,8 @@ import { calcularPeriodo } from '../domain/nomina.js';
 import { Empleada, LineaPago, PeriodoPago, Registro, Turno } from '../models/index.js';
 import { toPago } from '../serializers.js';
 import { conflict, notFound } from '../utils/errors.js';
+import { aplicarAdelantosALineas } from './adelantos.service.js';
+import { registrarMovimiento } from './auditoria.service.js';
 import { obtenerAjustes } from './configuracion.service.js';
 
 const plano = (filas) => filas.map((f) => f.get({ plain: true }));
@@ -52,16 +54,59 @@ export function pagarPeriodo({ id, inicio, fin, etiqueta, empleadaIds }) {
     if (solapado) throw conflict(`El periodo se solapa con «${solapado.etiqueta}», que ya está pagado`);
 
     const totalCent = lineas.reduce((a, l) => a + l.importeCent, 0);
+    const { adelantoDescontadoCent } = await aplicarAdelantosALineas(lineas, transaction);
     const pago = await PeriodoPago.create(
-      { id: id ?? randomUUID(), inicio, fin, etiqueta, pagadoEn: new Date(), totalCent },
+      {
+        id: id ?? randomUUID(),
+        inicio,
+        fin,
+        etiqueta,
+        pagadoEn: new Date(),
+        totalCent,
+        adelantoDescontadoCent,
+      },
       { transaction },
     );
     const filas = await LineaPago.bulkCreate(lineas.map((l) => ({ ...l, periodoId: pago.id })), { transaction });
-    return toPago({ ...pago.get({ plain: true }), lineas: filas });
+    const resultado = toPago({ ...pago.get({ plain: true }), lineas: filas });
+    await registrarMovimiento(
+      {
+        tipo: 'pago.crear',
+        entidad: 'periodo_pago',
+        entidadId: pago.id,
+        empleadaId: lineas.length === 1 ? lineas[0].empleadaId : null,
+        resumen: `Liquidación «${etiqueta}» · ${(totalCent / 100).toFixed(2)} €`,
+        detalle: {
+          inicio,
+          fin,
+          etiqueta,
+          totalCent,
+          adelantoDescontadoCent,
+          netoCent: totalCent - adelantoDescontadoCent,
+          empleadaIds: ids,
+        },
+      },
+      { transaction },
+    );
+    return resultado;
   });
 }
 
 export async function eliminarPago(id) {
-  const borrados = await PeriodoPago.destroy({ where: { id } });
-  if (!borrados) throw notFound('Pago');
+  return sequelize.transaction(async (transaction) => {
+    const pago = await PeriodoPago.findByPk(id, { include: lineasInclude, transaction });
+    if (!pago) throw notFound('Pago');
+    const plain = pago.get({ plain: true });
+    await pago.destroy({ transaction });
+    await registrarMovimiento(
+      {
+        tipo: 'pago.borrar',
+        entidad: 'periodo_pago',
+        entidadId: id,
+        resumen: `Borrada liquidación «${plain.etiqueta}»`,
+        detalle: { inicio: plain.inicio, fin: plain.fin, totalCent: plain.totalCent },
+      },
+      { transaction },
+    );
+  });
 }

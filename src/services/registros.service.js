@@ -4,6 +4,7 @@ import { Empleada, Registro, Turno } from '../models/index.js';
 import { toRegistro } from '../serializers.js';
 import { notFound } from '../utils/errors.js';
 import { bloquearHuecos } from '../utils/locks.js';
+import { registrarMovimiento } from './auditoria.service.js';
 import { filtroRango } from './turnos.service.js';
 
 export async function listarRegistros(rango) {
@@ -20,9 +21,32 @@ export function guardarRegistro(empleadaId, fecha, { id, tramos, nota, estado })
     if (existente) {
       const editadas = JSON.stringify(existente.tramos) !== JSON.stringify(tramos);
       await existente.update({ tramos, nota, estado, ...(editadas && { origen: 'manual' }) }, { transaction });
-      return { registro: toRegistro(existente), creado: false };
+      const registro = toRegistro(existente);
+      await registrarMovimiento(
+        {
+          tipo: 'registro.guardar',
+          entidad: 'registro',
+          entidadId: existente.id,
+          empleadaId,
+          resumen: `Horas ${fecha} · ${estado}`,
+          detalle: { fecha, estado },
+        },
+        { transaction },
+      );
+      return { registro, creado: false };
     }
     const nuevo = await Registro.create({ id: id ?? randomUUID(), empleadaId, fecha, tramos, nota, estado }, { transaction });
+    await registrarMovimiento(
+      {
+        tipo: 'registro.crear',
+        entidad: 'registro',
+        entidadId: nuevo.id,
+        empleadaId,
+        resumen: `Horas ${fecha} · ${estado}`,
+        detalle: { fecha, estado },
+      },
+      { transaction },
+    );
     return { registro: toRegistro(nuevo), creado: true };
   });
 }
@@ -50,7 +74,16 @@ export function confirmarDia(fecha, empleadaIds) {
         resultado.push(await Registro.create({ id: randomUUID(), empleadaId, fecha, tramos: turno.tramos, estado: 'confirmado' }, { transaction }));
       }
     }
-    return resultado.map(toRegistro);
+    const regs = resultado.map(toRegistro);
+    await registrarMovimiento(
+      {
+        tipo: 'registro.confirmar',
+        resumen: `Confirmadas horas del ${fecha} · ${regs.length} empleada(s)`,
+        detalle: { fecha, empleadaIds: regs.map((r) => r.empleadaId) },
+      },
+      { transaction },
+    );
+    return regs;
   });
 }
 

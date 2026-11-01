@@ -11,6 +11,8 @@ export const PeriodoPago = sequelize.define(
     etiqueta: { type: DataTypes.STRING(60), allowNull: false },
     pagadoEn: { type: DataTypes.DATE, allowNull: false },
     totalCent: { type: DataTypes.INTEGER, allowNull: false },
+    /** Suma de adelantos restados al entregar este pago (totalCent sigue siendo las horas). */
+    adelantoDescontadoCent: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
   },
   { tableName: 'periodos_pago' },
 );

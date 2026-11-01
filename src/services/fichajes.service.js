@@ -11,6 +11,7 @@ import { toFichaje, toRegistro, toTurno } from '../serializers.js';
 import { AppError, conflict, forbidden, notFound } from '../utils/errors.js';
 import { bloquearHuecos } from '../utils/locks.js';
 import { reloj } from '../utils/reloj.js';
+import { registrarMovimiento } from './auditoria.service.js';
 import { obtenerFichajeConfig } from './configuracion.service.js';
 import { filtroRango } from './turnos.service.js';
 
@@ -123,6 +124,18 @@ export function fichar(empleadaId, { tipo, ubicacion, ip }) {
       { transaction },
     );
     const registro = tipo === 'salida' ? await sincronizarRegistro(empleadaId, fecha, transaction) : null;
+    await registrarMovimiento(
+      {
+        tipo: 'fichaje.portal',
+        entidad: 'fichaje',
+        entidadId: fichaje.id,
+        empleadaId,
+        resumen: `Fichaje ${tipo} ${fecha} ${hhmm(minuto)}`,
+        detalle: { tipo, fecha, minuto, verificacion: v.verificacion },
+        actor: { tipo: 'empleada', id: empleadaId, nombre: null },
+      },
+      { transaction },
+    );
     return { fichaje: toFichaje(fichaje), registro: registro && toRegistro(registro) };
   });
 }
@@ -218,7 +231,19 @@ export function anadirFichaje({ empleadaId, fecha, tipo, minuto, motivo }) {
   return sequelize.transaction(async (transaction) => {
     if (!(await Empleada.count({ where: { id: empleadaId }, transaction }))) throw notFound('Empleada');
     await bloquearHuecos('fichaje', [{ empleadaId, fecha }], transaction);
-    await Fichaje.create({ id: randomUUID(), empleadaId, fecha, minuto, tipo, marca: reloj.ahora(), origen: 'encargado', motivo }, { transaction });
+    const idNuevo = randomUUID();
+    await Fichaje.create({ id: idNuevo, empleadaId, fecha, minuto, tipo, marca: reloj.ahora(), origen: 'encargado', motivo }, { transaction });
+    await registrarMovimiento(
+      {
+        tipo: 'fichaje.crear',
+        entidad: 'fichaje',
+        entidadId: idNuevo,
+        empleadaId,
+        resumen: `Fichaje añadido ${tipo} ${fecha}`,
+        detalle: { tipo, fecha, minuto, motivo },
+      },
+      { transaction },
+    );
     return resultadoDelDia(empleadaId, fecha, transaction);
   });
 }
@@ -238,8 +263,20 @@ export function corregirFichaje(id, { tipo, minuto, motivo }) {
     const original = await fichajeVigente(id, transaction);
     const ahora = reloj.ahora();
     await original.update({ anuladoEn: ahora, motivo }, { transaction });
+    const nuevoId = randomUUID();
     await Fichaje.create(
-      { id: randomUUID(), empleadaId: original.empleadaId, fecha: original.fecha, minuto, tipo, marca: ahora, origen: 'encargado', motivo, sustituyeA: original.id },
+      { id: nuevoId, empleadaId: original.empleadaId, fecha: original.fecha, minuto, tipo, marca: ahora, origen: 'encargado', motivo, sustituyeA: original.id },
+      { transaction },
+    );
+    await registrarMovimiento(
+      {
+        tipo: 'fichaje.corregir',
+        entidad: 'fichaje',
+        entidadId: nuevoId,
+        empleadaId: original.empleadaId,
+        resumen: `Fichaje corregido ${original.fecha}`,
+        detalle: { originalId: id, tipo, minuto, motivo },
+      },
       { transaction },
     );
     return resultadoDelDia(original.empleadaId, original.fecha, transaction);
@@ -251,6 +288,17 @@ export function anularFichaje(id, { motivo }) {
   return sequelize.transaction(async (transaction) => {
     const f = await fichajeVigente(id, transaction);
     await f.update({ anuladoEn: reloj.ahora(), motivo }, { transaction });
+    await registrarMovimiento(
+      {
+        tipo: 'fichaje.anular',
+        entidad: 'fichaje',
+        entidadId: id,
+        empleadaId: f.empleadaId,
+        resumen: `Fichaje anulado ${f.fecha}`,
+        detalle: { motivo, tipo: f.tipo, minuto: f.minuto },
+      },
+      { transaction },
+    );
     return resultadoDelDia(f.empleadaId, f.fecha, transaction);
   });
 }

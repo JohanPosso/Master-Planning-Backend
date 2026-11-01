@@ -1,4 +1,5 @@
 import { verificarToken, perfilDesdePayload } from '../services/auth.service.js';
+import { runWithActor } from '../services/auditoria.service.js';
 import { forbidden, unauthorized } from '../utils/errors.js';
 
 export async function requireAuth(req, _res, next) {
@@ -8,7 +9,12 @@ export async function requireAuth(req, _res, next) {
     if (!token) throw unauthorized();
     const payload = verificarToken(token);
     req.auth = { ...payload, perfil: await perfilDesdePayload(payload) };
-    next();
+    const actor = {
+      tipo: req.auth.rol,
+      id: req.auth.sub,
+      nombre: req.auth.perfil?.nombre ?? req.auth.rol,
+    };
+    runWithActor(actor, () => next());
   } catch (err) {
     next(err);
   }

@@ -6,6 +6,7 @@ import { Empleada, Turno } from '../models/index.js';
 import { toEmpleada } from '../serializers.js';
 import { conflict, notFound } from '../utils/errors.js';
 import { upsertById } from '../utils/repository.js';
+import { registrarMovimiento } from './auditoria.service.js';
 import { hashPassword, normalizarUsuario, usuarioDisponible } from './auth.service.js';
 
 const CAMPOS_FICHA = [
@@ -54,7 +55,19 @@ export function guardarEmpleada(id, datos) {
 
     const { instancia, creado } = await upsertById(Empleada, id, valores, { transaction });
     await instancia.reload({ transaction });
-    return { empleada: toEmpleada(instancia), creado };
+    const empleada = toEmpleada(instancia);
+    await registrarMovimiento(
+      {
+        tipo: creado ? 'empleada.crear' : 'empleada.guardar',
+        entidad: 'empleada',
+        entidadId: id,
+        empleadaId: id,
+        resumen: creado ? `Alta de ${empleada.nombre}` : `Actualizada ${empleada.nombre}`,
+        detalle: { nombre: empleada.nombre, activa: empleada.activa, excluirNomina: empleada.excluirNomina },
+      },
+      { transaction },
+    );
+    return { empleada, creado };
   });
 }
 
@@ -69,6 +82,18 @@ export function eliminarEmpleada(id) {
       { transaction },
     );
     const turnosEliminados = await Turno.destroy({ where: { empleadaId: id, fecha: { [Op.gte]: hoy } }, transaction });
-    return { empleada: toEmpleada(empleada), turnosEliminados };
+    const out = toEmpleada(empleada);
+    await registrarMovimiento(
+      {
+        tipo: 'empleada.eliminar',
+        entidad: 'empleada',
+        entidadId: id,
+        empleadaId: id,
+        resumen: `Eliminada ${out.nombre}`,
+        detalle: { turnosEliminados, desde: hoy },
+      },
+      { transaction },
+    );
+    return { empleada: out, turnosEliminados };
   });
 }

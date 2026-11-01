@@ -6,6 +6,7 @@ import { toTurno } from '../serializers.js';
 import { conflict, notFound } from '../utils/errors.js';
 import { bloquearHuecos } from '../utils/locks.js';
 import { upsertById } from '../utils/repository.js';
+import { registrarMovimiento } from './auditoria.service.js';
 
 export const filtroRango = ({ desde, hasta } = {}) => {
   const fecha = { ...(desde && { [Op.gte]: desde }), ...(hasta && { [Op.lte]: hasta }) };
@@ -41,13 +42,40 @@ export function guardarTurno(id, datos) {
     const plantillaId = await plantillaVigente(datos.plantillaId, transaction);
     await liberarHueco({ empleadaId: datos.empleadaId, fecha: datos.fecha, excepto: id }, transaction);
     const { instancia, creado } = await upsertById(Turno, id, { ...datos, plantillaId }, { transaction });
-    return { turno: toTurno(instancia), creado };
+    const turno = toTurno(instancia);
+    await registrarMovimiento(
+      {
+        tipo: creado ? 'turno.crear' : 'turno.guardar',
+        entidad: 'turno',
+        entidadId: id,
+        empleadaId: datos.empleadaId,
+        resumen: `Turno ${datos.fecha}`,
+        detalle: { fecha: datos.fecha, tramos: datos.tramos },
+      },
+      { transaction },
+    );
+    return { turno, creado };
   });
 }
 
 export async function eliminarTurno(id) {
-  const borrados = await Turno.destroy({ where: { id } });
-  if (!borrados) throw notFound('Turno');
+  return sequelize.transaction(async (transaction) => {
+    const turno = await Turno.findByPk(id, { transaction });
+    if (!turno) throw notFound('Turno');
+    const plain = turno.get({ plain: true });
+    await turno.destroy({ transaction });
+    await registrarMovimiento(
+      {
+        tipo: 'turno.borrar',
+        entidad: 'turno',
+        entidadId: id,
+        empleadaId: plain.empleadaId,
+        resumen: `Turno borrado ${plain.fecha}`,
+        detalle: { fecha: plain.fecha },
+      },
+      { transaction },
+    );
+  });
 }
 
 /** Mover (o duplicar con Alt) un turno a otra celda. Soltarlo en su propia celda no hace nada. */
@@ -64,11 +92,34 @@ export function moverTurno(id, { empleadaId, fecha, duplicar, nuevoId }) {
     if (!duplicar) {
       await liberarHueco({ empleadaId, fecha, excepto: id }, transaction);
       await origen.update({ empleadaId, fecha }, { transaction });
-      return { turno: toTurno(origen), creado: false };
+      const turno = toTurno(origen);
+      await registrarMovimiento(
+        {
+          tipo: 'turno.mover',
+          entidad: 'turno',
+          entidadId: id,
+          empleadaId,
+          resumen: `Turno movido a ${fecha}`,
+          detalle: { fecha },
+        },
+        { transaction },
+      );
+      return { turno, creado: false };
     }
     await liberarHueco({ empleadaId, fecha }, transaction);
     const copia = await Turno.create(
       { id: nuevoId ?? randomUUID(), empleadaId, fecha, tramos: origen.tramos, plantillaId: origen.plantillaId, avisosIgnorados: origen.avisosIgnorados },
+      { transaction },
+    );
+    await registrarMovimiento(
+      {
+        tipo: 'turno.duplicar',
+        entidad: 'turno',
+        entidadId: copia.id,
+        empleadaId,
+        resumen: `Turno duplicado a ${fecha}`,
+        detalle: { fecha, origenId: id },
+      },
       { transaction },
     );
     return { turno: toTurno(copia), creado: true };

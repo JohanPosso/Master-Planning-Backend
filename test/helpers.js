@@ -41,7 +41,7 @@ export function api() {
 export const apiRaw = () => request(app);
 
 export async function limpiarBD() {
-  await sequelize.query('TRUNCATE fichajes, lineas_pago, periodos_pago, registros, turnos, semanas, plantillas, festivos, empleadas CASCADE');
+  await sequelize.query('TRUNCATE fichajes, lineas_pago, periodos_pago, adelantos, movimientos, registros, turnos, semanas, plantillas, festivos, empleadas CASCADE');
   await sequelize.query('UPDATE configuracion SET reglas = CAST(:r AS JSONB), fichaje = CAST(:f AS JSONB), recargo_domingo_pct = 0, recargo_festivo_pct = 0', {
     replacements: { r: JSON.stringify(REGLAS_POR_DEFECTO), f: JSON.stringify(FICHAJE_POR_DEFECTO) },
   });
